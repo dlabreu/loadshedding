@@ -1,0 +1,72 @@
+############################
+# macOS
+############################
+.DS_Store
+.AppleDouble
+.LSOverride
+
+############################
+# Ansible
+############################
+*.retry
+*.log
+*.fact
+*.tmp
+ansible.log
+ansible.cfg.bak
+.inventory
+.inventory.*
+.cache/
+.fact_cache/
+__pycache__/
+*.pyc
+
+############################
+# Shell scripts
+############################
+*.swp
+*.swo
+*.bak
+*.tmp
+*.out
+*.pid
+*.err
+*.log
+
+############################
+# PowerShell
+############################
+*.psm1.bak
+*.ps1.bak
+*.psd1.bak
+*.ps1xml.bak
+powershell.errorlog
+PSReadLineHistory.txt
+
+############################
+# Environment / Secrets
+############################
+.env
+.env.*
+*.key
+*.pem
+*.pfx
+*.cer
+*.crt
+*.txt
+
+############################
+# Editors & IDEs
+############################
+.vscode/
+.idea/
+*.code-workspace
+.zed/
+.zed-settings.json
+
+############################
+# OS / Misc
+############################
+Thumbs.db
+ehthumbs.db
+Desktop.ini
