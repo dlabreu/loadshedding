@@ -1,0 +1,19 @@
+apiVersion: metal3.io/v1alpha1
+kind: BareMetalHost
+metadata:
+  name: lab
+  namespace: openshift-machine-api
+  annotations:
+    baremetalhost.metal3.io/ipmi-cipher-suite: "3"
+    inspect.metal3.io: disabled
+
+spec:
+  automatedCleaningMode: disabled
+  online: false
+  bootMACAddress: "XXXXXXXXXX"
+  bootMode: UEFI
+
+  bmc:
+    address: redfish-virtualmedia://XXXXXXXXXX/redfish/v1/Systems/1
+    credentialsName: lab-bmc-secret
+    disableCertificateVerification: true
