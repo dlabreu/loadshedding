@@ -1,0 +1,21 @@
+FROM fedora:38
+
+# Install Ansible and dependencies
+RUN dnf install -y ansible jq curl tar && dnf clean all
+
+# Install OpenShift CLI (oc)
+RUN curl -L https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-linux.tar.gz | tar -xz && \
+    mv oc kubectl /usr/local/bin/
+
+# OpenShift standard: Set home to /ansible and give Group 0 permissions
+WORKDIR /ansible
+COPY playbook.yaml .
+
+RUN chgrp -R 0 /ansible && \
+    chmod -R g=u /ansible
+
+# Environment setup for non-root execution
+ENV HOME=/ansible
+USER 1001
+
+CMD ["ansible-playbook", "playbook.yaml"]
