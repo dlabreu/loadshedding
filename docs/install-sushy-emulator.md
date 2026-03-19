@@ -125,3 +125,6 @@ bmc:
 
 - <HOST_IP> → your Fedora host IP
 - <SYSTEM_ID> → UUID assigned by Sushy for the VM
+
+
+##
