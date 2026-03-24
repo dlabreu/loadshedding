@@ -1,0 +1,154 @@
+---
+# ACM Policy: loadshedding-shutdown-policy (revised)
+#
+# ACM enforces this on lab1 and lab2. It does three things:
+#   1. Cordon the SNO node (unschedulable: true) via ConfigurationPolicy
+#   2. Run a drain Job on the managed cluster to evict workloads
+#   3. Set BareMetalHost spec.online: false — baremetal-operator issues IPMI power-off
+#
+# Prerequisites on each managed cluster:
+#   - metal3.io/baremetal-operator running (installed by default with OCP on baremetal)
+#   - BareMetalHost CR exists in openshift-machine-api (created at OCP install time)
+#   - IPMI credentials in the Secret referenced by the BareMetalHost
+#
+# Find your BMH name: oc get bmh -n openshift-machine-api
+# For SNO it is typically the hostname set during install.
+#
+# Deploy to Hub: oc apply -f shutdown-policy.yml -n open-cluster-management
+
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: loadshedding-shutdown-policy
+  namespace: open-cluster-management
+  annotations:
+    policy.open-cluster-management.io/standards: "custom"
+    policy.open-cluster-management.io/categories: "power-management"
+    policy.open-cluster-management.io/controls: "loadshedding-protection"
+    loadshedding.io/managed-by: "eda-ansible-automation"
+spec:
+  disabled: true
+  remediationAction: enforce
+  policy-templates:
+
+    # Step 1: Cordon — node unschedulable
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: cordon-sno-node
+        spec:
+          remediationAction: enforce
+          severity: high
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: v1
+                kind: Node
+                metadata:
+                  name: '{{ fromSecret "open-cluster-management-agent" "hub-kubeconfig-secret" "cluster-name" | base64dec }}'
+                spec:
+                  unschedulable: true
+
+    # Step 2: Drain — Job evicts non-daemonset pods
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: drain-sno-node
+        spec:
+          remediationAction: enforce
+          severity: high
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: batch/v1
+                kind: Job
+                metadata:
+                  name: loadshedding-drain
+                  namespace: openshift-machine-api
+                  labels:
+                    loadshedding.io/managed-by: acm-policy
+                spec:
+                  ttlSecondsAfterFinished: 600
+                  template:
+                    spec:
+                      restartPolicy: OnFailure
+                      serviceAccountName: cluster-admin
+                      hostNetwork: true
+                      containers:
+                        - name: drain
+                          image: registry.redhat.io/openshift4/ose-cli:latest
+                          command:
+                            - /bin/sh
+                            - -c
+                            - |
+                              NODE=$(oc get node -o jsonpath='{.items[0].metadata.name}')
+                              echo "Draining node: $NODE"
+                              oc adm drain "$NODE" \
+                                --ignore-daemonsets \
+                                --delete-emptydir-data \
+                                --force \
+                                --timeout=8m
+                              echo "Drain complete."
+                          env:
+                            - name: HOME
+                              value: /tmp
+
+    # Step 3: Power off via BareMetalHost (IPMI)
+    # evaluationInterval gives the drain Job ~5 min to finish first.
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: power-off-via-bmh
+        spec:
+          remediationAction: enforce
+          severity: high
+          evaluationInterval:
+            compliant: 5m
+            noncompliant: 1m
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: metal3.io/v1alpha1
+                kind: BareMetalHost
+                metadata:
+                  namespace: openshift-machine-api
+                  # Replace with your actual BMH name if it differs from the cluster name
+                  name: '{{ fromSecret "open-cluster-management-agent" "hub-kubeconfig-secret" "cluster-name" | base64dec }}'
+                spec:
+                  online: false
+
+---
+apiVersion: apps.open-cluster-management.io/v1
+kind: PlacementRule
+metadata:
+  name: loadshedding-lab-placement
+  namespace: open-cluster-management
+spec:
+  clusterConditions:
+    - type: ManagedClusterConditionAvailable
+      status: "True"
+  clusterSelector:
+    matchExpressions:
+      - key: name
+        operator: In
+        values:
+          - lab1
+          - lab2
+
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: loadshedding-shutdown-binding
+  namespace: open-cluster-management
+placementRef:
+  name: loadshedding-lab-placement
+  kind: PlacementRule
+  apiGroup: apps.open-cluster-management.io
+subjects:
+  - name: loadshedding-shutdown-policy
+    kind: Policy
+    apiGroup: policy.open-cluster-management.io

@@ -1,0 +1,169 @@
+---
+# ACM Policy: loadshedding-restore-policy (revised)
+#
+# Mirrors the shutdown policy in reverse:
+#   1. Set BareMetalHost spec.online: true — baremetal-operator issues IPMI power-on
+#   2. Once the node is up, mark it schedulable (unschedulable: false)
+#   3. Verify critical cluster operators are Available (inform only — surfaces in ACM console)
+#   4. Ensures the shutdown policy is disabled (mutual exclusion guard)
+#
+# Deploy to Hub: oc apply -f restore-policy.yml -n open-cluster-management
+
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: loadshedding-restore-policy
+  namespace: open-cluster-management
+  annotations:
+    policy.open-cluster-management.io/standards: "custom"
+    policy.open-cluster-management.io/categories: "power-management"
+    policy.open-cluster-management.io/controls: "loadshedding-protection"
+    loadshedding.io/managed-by: "eda-ansible-automation"
+spec:
+  disabled: true
+  remediationAction: enforce
+  policy-templates:
+
+    # Step 1: Power on via BareMetalHost (IPMI)
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: power-on-via-bmh
+        spec:
+          remediationAction: enforce
+          severity: high
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: metal3.io/v1alpha1
+                kind: BareMetalHost
+                metadata:
+                  namespace: openshift-machine-api
+                  name: '{{ fromSecret "open-cluster-management-agent" "hub-kubeconfig-secret" "cluster-name" | base64dec }}'
+                spec:
+                  online: true
+
+    # Step 2: Uncordon — node schedulable again
+    # evaluationInterval gives the node ~10 min to boot before ACM checks compliance.
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: uncordon-sno-node
+        spec:
+          remediationAction: enforce
+          severity: high
+          evaluationInterval:
+            compliant: 10m
+            noncompliant: 2m
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: v1
+                kind: Node
+                metadata:
+                  name: '{{ fromSecret "open-cluster-management-agent" "hub-kubeconfig-secret" "cluster-name" | base64dec }}'
+                spec:
+                  unschedulable: false
+
+    # Step 3: Verify critical operators are healthy (inform — shows in ACM console)
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: cluster-operators-healthy
+        spec:
+          remediationAction: inform
+          severity: high
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: config.openshift.io/v1
+                kind: ClusterOperator
+                metadata:
+                  name: kube-apiserver
+                status:
+                  conditions:
+                    - type: Available
+                      status: "True"
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: config.openshift.io/v1
+                kind: ClusterOperator
+                metadata:
+                  name: etcd
+                status:
+                  conditions:
+                    - type: Available
+                      status: "True"
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: config.openshift.io/v1
+                kind: ClusterOperator
+                metadata:
+                  name: network
+                status:
+                  conditions:
+                    - type: Available
+                      status: "True"
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: config.openshift.io/v1
+                kind: ClusterOperator
+                metadata:
+                  name: ingress
+                status:
+                  conditions:
+                    - type: Available
+                      status: "True"
+
+    # Step 4: Mutual exclusion — ensure shutdown policy is disabled
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: shutdown-policy-disabled
+        spec:
+          remediationAction: enforce
+          severity: medium
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: policy.open-cluster-management.io/v1
+                kind: Policy
+                metadata:
+                  name: loadshedding-shutdown-policy
+                  namespace: open-cluster-management
+                spec:
+                  disabled: true
+
+---
+apiVersion: apps.open-cluster-management.io/v1
+kind: PlacementRule
+metadata:
+  name: loadshedding-restore-placement
+  namespace: open-cluster-management
+spec:
+  clusterSelector:
+    matchExpressions:
+      - key: name
+        operator: In
+        values:
+          - lab1
+          - lab2
+
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: loadshedding-restore-binding
+  namespace: open-cluster-management
+placementRef:
+  name: loadshedding-restore-placement
+  kind: PlacementRule
+  apiGroup: apps.open-cluster-management.io
+subjects:
+  - name: loadshedding-restore-policy
+    kind: Policy
+    apiGroup: policy.open-cluster-management.io

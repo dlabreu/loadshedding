@@ -1,0 +1,101 @@
+---
+# EDA Rulebook: Loadshedding Cluster Protection (revised)
+# EDA's only job: watch the schedule, trigger a notify-only AAP playbook.
+# ACM owns all cluster lifecycle: drain, shutdown, IPMI power, restore.
+# Deploy this on the Hub cluster's Ansible Automation Platform EDA component.
+#
+# Required credentials/variables in AAP:
+#   eskomsepush_api_token  - your EskomSePush API token
+#   acm_hub_url            - e.g. https://multiclusterhub-open-cluster-management.apps.hub.example.com
+#   acm_token              - service account token with policy-admin rights on ACM hub
+#   ipmi_lab1_host         - IPMI IP for Lab1
+#   ipmi_lab2_host         - IPMI IP for Lab2
+#   ipmi_user              - shared IPMI username
+#   ipmi_password          - IPMI password (use vault)
+
+- name: Loadshedding SNO Protection
+  hosts: all
+
+  sources:
+    - name: eskomsepush_monitor
+      eskomsepush_source:
+        api_token: "{{ eskomsepush_api_token }}"
+        area_id: "{{ eskomsepush_area_id | default('capetown-10-atlantis') }}"
+        warning_minutes: "{{ warning_minutes | default(30) }}"
+        poll_interval: "{{ poll_interval | default(300) }}"
+
+  rules:
+
+    # ---------------------------------------------------------------
+    # Rule 1: Approaching — graceful shutdown ~30 min before outage
+    # ---------------------------------------------------------------
+    - name: Graceful shutdown on approaching loadshedding
+      condition: event.type == "loadshedding_approaching"
+      action:
+        run_job_template:
+          name: "SNO Graceful Shutdown"
+          organization: "Default"
+          job_args:
+            extra_vars:
+              shutdown_reason: "Loadshedding scheduled at {{ event.start }}"
+              loadshedding_start: "{{ event.start }}"
+              loadshedding_end: "{{ event.end }}"
+              area_name: "{{ event.area_name }}"
+              acm_hub_url: "{{ acm_hub_url }}"
+              acm_token: "{{ acm_token }}"
+              ipmi_lab1_host: "{{ ipmi_lab1_host }}"
+              ipmi_lab2_host: "{{ ipmi_lab2_host }}"
+              ipmi_user: "{{ ipmi_user }}"
+              ipmi_password: "{{ ipmi_password }}"
+
+    # ---------------------------------------------------------------
+    # Rule 2: Active — enforce shutdown policy if somehow still up
+    #         (safety net if the warning window was missed)
+    # ---------------------------------------------------------------
+    - name: Emergency shutdown if loadshedding active and clusters still up
+      condition: event.type == "loadshedding_active"
+      action:
+        run_job_template:
+          name: "SNO Graceful Shutdown"
+          organization: "Default"
+          job_args:
+            extra_vars:
+              shutdown_reason: "EMERGENCY - loadshedding already active"
+              loadshedding_start: "{{ event.start }}"
+              loadshedding_end: "{{ event.end }}"
+              area_name: "{{ event.area_name }}"
+              acm_hub_url: "{{ acm_hub_url }}"
+              acm_token: "{{ acm_token }}"
+              ipmi_lab1_host: "{{ ipmi_lab1_host }}"
+              ipmi_lab2_host: "{{ ipmi_lab2_host }}"
+              ipmi_user: "{{ ipmi_user }}"
+              ipmi_password: "{{ ipmi_password }}"
+
+    # ---------------------------------------------------------------
+    # Rule 3: Ended — power on and restore clusters
+    # ---------------------------------------------------------------
+    - name: Power on clusters after loadshedding ends
+      condition: event.type == "loadshedding_ended"
+      action:
+        run_job_template:
+          name: "SNO Power On and Restore"
+          organization: "Default"
+          job_args:
+            extra_vars:
+              acm_hub_url: "{{ acm_hub_url }}"
+              acm_token: "{{ acm_token }}"
+              ipmi_lab1_host: "{{ ipmi_lab1_host }}"
+              ipmi_lab2_host: "{{ ipmi_lab2_host }}"
+              ipmi_user: "{{ ipmi_user }}"
+              ipmi_password: "{{ ipmi_password }}"
+
+    # ---------------------------------------------------------------
+    # Rule 4: Status updates — forward to dashboard/logging
+    # ---------------------------------------------------------------
+    - name: Log status updates
+      condition: event.type == "status_update"
+      action:
+        post_event:
+          event:
+            type: dashboard_refresh
+            payload: "{{ event }}"

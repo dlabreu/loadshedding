@@ -1,0 +1,52 @@
+---
+# Playbook: Notify ACM — Restore
+# Disables the shutdown policy and enables the restore policy.
+# ACM then handles: BareMetalHost IPMI power-on, uncordon, health check.
+
+- name: Enable ACM loadshedding restore policy
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+
+    - name: Log trigger
+      ansible.builtin.debug:
+        msg: >
+          Loadshedding ended for {{ area_name }}.
+          Enabling ACM restore policy — ACM will power on and uncordon lab1 and lab2.
+
+    - name: Disable ACM shutdown policy
+      ansible.builtin.uri:
+        url: "{{ acm_hub_url }}/apis/policy.open-cluster-management.io/v1/namespaces/open-cluster-management/policies/loadshedding-shutdown-policy"
+        method: PATCH
+        headers:
+          Authorization: "Bearer {{ acm_token }}"
+          Content-Type: "application/merge-patch+json"
+        body_format: json
+        body:
+          spec:
+            disabled: true
+        validate_certs: true
+        status_code: [200, 201, 204]
+
+    - name: Enable ACM restore policy
+      ansible.builtin.uri:
+        url: "{{ acm_hub_url }}/apis/policy.open-cluster-management.io/v1/namespaces/open-cluster-management/policies/loadshedding-restore-policy"
+        method: PATCH
+        headers:
+          Authorization: "Bearer {{ acm_token }}"
+          Content-Type: "application/merge-patch+json"
+        body_format: json
+        body:
+          metadata:
+            annotations:
+              loadshedding.io/restored-at: "{{ ansible_date_time.iso8601 | default('') }}"
+              loadshedding.io/area: "{{ area_name }}"
+          spec:
+            disabled: false
+        validate_certs: true
+        status_code: [200, 201, 204]
+
+    - name: Confirm
+      ansible.builtin.debug:
+        msg: "ACM restore policy enabled. ACM will now power on and uncordon lab1 and lab2 via BareMetalHost."

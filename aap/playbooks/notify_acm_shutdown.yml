@@ -1,0 +1,56 @@
+---
+# Playbook: Notify ACM — Shutdown
+# This is the ONLY thing AAP does. It enables the ACM shutdown policy
+# and annotates it with the outage window so ACM can act.
+# ACM then handles: cordon, drain, and BareMetalHost IPMI power-off.
+
+- name: Enable ACM loadshedding shutdown policy
+  hosts: localhost
+  gather_facts: false
+
+  tasks:
+
+    - name: Log trigger
+      ansible.builtin.debug:
+        msg: >
+          Loadshedding approaching for {{ area_name }}.
+          Window: {{ loadshedding_start }} → {{ loadshedding_end }}.
+          Enabling ACM shutdown policy — ACM will cordon, drain and power off lab1 and lab2.
+
+    - name: Enable ACM shutdown policy and annotate outage window
+      ansible.builtin.uri:
+        url: "{{ acm_hub_url }}/apis/policy.open-cluster-management.io/v1/namespaces/open-cluster-management/policies/loadshedding-shutdown-policy"
+        method: PATCH
+        headers:
+          Authorization: "Bearer {{ acm_token }}"
+          Content-Type: "application/merge-patch+json"
+        body_format: json
+        body:
+          metadata:
+            annotations:
+              loadshedding.io/outage-start: "{{ loadshedding_start }}"
+              loadshedding.io/outage-end: "{{ loadshedding_end }}"
+              loadshedding.io/triggered-by: "eda-eskomsepush"
+              loadshedding.io/area: "{{ area_name }}"
+          spec:
+            disabled: false
+        validate_certs: true
+        status_code: [200, 201, 204]
+
+    - name: Disable ACM restore policy (cannot be active at same time)
+      ansible.builtin.uri:
+        url: "{{ acm_hub_url }}/apis/policy.open-cluster-management.io/v1/namespaces/open-cluster-management/policies/loadshedding-restore-policy"
+        method: PATCH
+        headers:
+          Authorization: "Bearer {{ acm_token }}"
+          Content-Type: "application/merge-patch+json"
+        body_format: json
+        body:
+          spec:
+            disabled: true
+        validate_certs: true
+        status_code: [200, 201, 204]
+
+    - name: Confirm
+      ansible.builtin.debug:
+        msg: "ACM shutdown policy enabled. ACM will now drain and power off lab1 and lab2 via BareMetalHost."
