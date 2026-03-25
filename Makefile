@@ -1,15 +1,29 @@
 # Makefile — sno-loadshedding
-# Requires: oc, kubectl, python3
-# Set KUBECONFIG or pass KUBECONFIG=... to any target.
+# Requires: oc, python3
+# All targets that talk to the hub assume KUBECONFIG is set or
+# you are already logged in via oc login.
+#
+# Policy structure (4 policies total):
+#   shutdown-policy.yml  →  loadshedding-shutdown-policy     (targets lab1/lab2)
+#                        →  loadshedding-poweroff-hub-policy  (targets local-cluster)
+#   restore-policy.yml   →  loadshedding-restore-policy      (targets lab1/lab2)
+#                        →  loadshedding-poweron-hub-policy   (targets local-cluster)
 
 HUB_NS         := open-cluster-management
+BMH_NS         := lab-infra
 DASHBOARD_NS   := loadshedding-dashboard
-DASHBOARD_IMG  := quay.io/yourorg/loadshedding-dashboard:latest
+SUSHY_URL      := https://192.168.22.157:8000
+LAB1_SYSTEM_ID := bca393c5-d932-42ab-9c37-a6f19d4322f8
+LAB2_SYSTEM_ID := replace-with-lab2-uuid
 
-.PHONY: help apply-policies delete-policies check-policies \
-        check-bmh-lab1 check-bmh-lab2 check-bmh \
-        dashboard-build dashboard-deploy dashboard-delete \
+.PHONY: help \
+        apply-policies delete-policies check-policies disable-all \
         shutdown-test restore-test \
+        check-power-lab1 check-power-lab2 \
+        check-bmh \
+        check-jobs clean-jobs \
+        check-cluster-lab1 \
+        dashboard-deploy dashboard-delete \
         lint
 
 # ---------------------------------------------------------------
@@ -18,68 +32,167 @@ help:
 	@echo "  sno-loadshedding Makefile"
 	@echo ""
 	@echo "  ACM policies"
-	@echo "    make apply-policies      Apply shutdown + restore policies to hub"
-	@echo "    make delete-policies     Remove both policies from hub"
-	@echo "    make check-policies      Show current policy compliance on hub"
+	@echo "    make apply-policies      Apply all 4 policies to hub (all start disabled)"
+	@echo "    make delete-policies     Remove all 4 policies from hub"
+	@echo "    make check-policies      Show disabled/compliant status of all 4 policies"
+	@echo "    make disable-all         Disable all 4 policies (safe reset)"
 	@echo ""
-	@echo "  BareMetalHost checks"
-	@echo "    make check-bmh-lab1      Show BMH status on lab1"
-	@echo "    make check-bmh-lab2      Show BMH status on lab2"
-	@echo "    make check-bmh           Show BMH status on both clusters"
+	@echo "  Manual override (use with care)"
+	@echo "    make shutdown-test       Enable shutdown pair — cordon+drain+power-off"
+	@echo "    make restore-test        Enable restore pair  — power-on+uncordon"
+	@echo ""
+	@echo "  Power state checks (via sushy Redfish)"
+	@echo "    make check-power-lab1    Show lab1 current power state"
+	@echo "    make check-power-lab2    Show lab2 current power state"
+	@echo ""
+	@echo "  BMH checks"
+	@echo "    make check-bmh           Show BMH status in lab-infra namespace"
+	@echo ""
+	@echo "  Job management"
+	@echo "    make check-jobs          Show loadshedding Jobs on hub"
+	@echo "    make clean-jobs          Delete completed loadshedding Jobs on hub"
+	@echo ""
+	@echo "  Cluster checks"
+	@echo "    make check-cluster-lab1  Show lab1 managed cluster status"
 	@echo ""
 	@echo "  Dashboard"
-	@echo "    make dashboard-deploy    Deploy dashboard to hub cluster"
-	@echo "    make dashboard-delete    Remove dashboard from hub cluster"
-	@echo ""
-	@echo "  Manual override"
-	@echo "    make shutdown-test       Enable shutdown policy manually (dry run test)"
-	@echo "    make restore-test        Enable restore policy manually"
+	@echo "    make dashboard-deploy    Deploy dashboard to hub"
+	@echo "    make dashboard-delete    Remove dashboard from hub"
 	@echo ""
 	@echo "  Lint"
-	@echo "    make lint                Lint all YAML files"
+	@echo "    make lint                Lint all YAML and Python files"
 	@echo ""
 
 # ---------------------------------------------------------------
 # ACM policies
 # ---------------------------------------------------------------
 apply-policies:
-	@echo "==> Applying ACM policies to hub..."
+	@echo "==> Applying all 4 ACM policies to hub..."
 	oc apply -f acm-policies/shutdown-policy.yml -n $(HUB_NS)
 	oc apply -f acm-policies/restore-policy.yml  -n $(HUB_NS)
-	@echo "==> Done. Both policies start disabled — EDA enables them at runtime."
+	@echo ""
+	@echo "==> Done. All 4 policies start disabled=true."
+	@echo "    EDA/AAP enables the correct pair at runtime."
+	@echo "    To test manually: make shutdown-test or make restore-test"
 
 delete-policies:
-	@echo "==> Removing ACM policies from hub..."
+	@echo "==> Removing all 4 ACM policies from hub..."
 	oc delete -f acm-policies/shutdown-policy.yml -n $(HUB_NS) --ignore-not-found
 	oc delete -f acm-policies/restore-policy.yml  -n $(HUB_NS) --ignore-not-found
+	@echo "==> Done."
 
 check-policies:
-	@echo "==> Shutdown policy status:"
-	@oc get policy loadshedding-shutdown-policy -n $(HUB_NS) \
-	  -o custom-columns=NAME:.metadata.name,DISABLED:.spec.disabled,COMPLIANT:.status.compliant \
-	  2>/dev/null || echo "  Policy not found"
+	@echo "==> All loadshedding policy states:"
 	@echo ""
-	@echo "==> Restore policy status:"
-	@oc get policy loadshedding-restore-policy -n $(HUB_NS) \
-	  -o custom-columns=NAME:.metadata.name,DISABLED:.spec.disabled,COMPLIANT:.status.compliant \
-	  2>/dev/null || echo "  Policy not found"
+	@oc get policy -n $(HUB_NS) \
+	  -o custom-columns="NAME:.metadata.name,DISABLED:.spec.disabled,COMPLIANT:.status.compliant" \
+	  2>/dev/null | grep -E "NAME|loadshedding" || echo "  No loadshedding policies found"
+
+disable-all:
+	@echo "==> Disabling all 4 loadshedding policies..."
+	-oc patch policy loadshedding-shutdown-policy \
+	  -n $(HUB_NS) --type=merge -p '{"spec":{"disabled":true}}'
+	-oc patch policy loadshedding-poweroff-hub-policy \
+	  -n $(HUB_NS) --type=merge -p '{"spec":{"disabled":true}}'
+	-oc patch policy loadshedding-restore-policy \
+	  -n $(HUB_NS) --type=merge -p '{"spec":{"disabled":true}}'
+	-oc patch policy loadshedding-poweron-hub-policy \
+	  -n $(HUB_NS) --type=merge -p '{"spec":{"disabled":true}}'
+	@echo "==> All policies disabled."
 
 # ---------------------------------------------------------------
-# BareMetalHost checks (pass KUBECONFIG_LAB1/LAB2 or set KUBECONFIG)
+# Manual override — enables the correct PAIR of policies together
 # ---------------------------------------------------------------
-check-bmh-lab1:
-	@echo "==> BareMetalHost on lab1:"
-	oc get bmh -n openshift-machine-api \
-	  --kubeconfig=$(KUBECONFIG_LAB1) \
-	  -o custom-columns=NAME:.metadata.name,STATUS:.status.provisioning.state,ONLINE:.spec.online,POWER:.status.poweredOn
+shutdown-test:
+	@echo "==> WARNING: This will cordon, drain and power off lab1 and lab2."
+	@read -p "Type YES to continue: " confirm && [ "$$confirm" = "YES" ]
+	@echo "==> Disabling restore pair first..."
+	-oc patch policy loadshedding-restore-policy \
+	  -n $(HUB_NS) --type=merge -p '{"spec":{"disabled":true}}'
+	-oc patch policy loadshedding-poweron-hub-policy \
+	  -n $(HUB_NS) --type=merge -p '{"spec":{"disabled":true}}'
+	@echo "==> Enabling shutdown pair..."
+	oc patch policy loadshedding-shutdown-policy \
+	  -n $(HUB_NS) --type=merge -p '{"spec":{"disabled":false}}'
+	oc patch policy loadshedding-poweroff-hub-policy \
+	  -n $(HUB_NS) --type=merge -p '{"spec":{"disabled":false}}'
+	@echo ""
+	@echo "==> Shutdown pair enabled. Monitor:"
+	@echo "    make check-policies"
+	@echo "    make check-jobs"
+	@echo "    make check-power-lab1"
 
-check-bmh-lab2:
-	@echo "==> BareMetalHost on lab2:"
-	oc get bmh -n openshift-machine-api \
-	  --kubeconfig=$(KUBECONFIG_LAB2) \
-	  -o custom-columns=NAME:.metadata.name,STATUS:.status.provisioning.state,ONLINE:.spec.online,POWER:.status.poweredOn
+restore-test:
+	@echo "==> WARNING: This will power on and uncordon lab1 and lab2."
+	@read -p "Type YES to continue: " confirm && [ "$$confirm" = "YES" ]
+	@echo "==> Disabling shutdown pair first..."
+	-oc patch policy loadshedding-shutdown-policy \
+	  -n $(HUB_NS) --type=merge -p '{"spec":{"disabled":true}}'
+	-oc patch policy loadshedding-poweroff-hub-policy \
+	  -n $(HUB_NS) --type=merge -p '{"spec":{"disabled":true}}'
+	@echo "==> Enabling restore pair..."
+	oc patch policy loadshedding-restore-policy \
+	  -n $(HUB_NS) --type=merge -p '{"spec":{"disabled":false}}'
+	oc patch policy loadshedding-poweron-hub-policy \
+	  -n $(HUB_NS) --type=merge -p '{"spec":{"disabled":false}}'
+	@echo ""
+	@echo "==> Restore pair enabled. Monitor:"
+	@echo "    make check-policies"
+	@echo "    make check-jobs"
+	@echo "    make check-cluster-lab1"
 
-check-bmh: check-bmh-lab1 check-bmh-lab2
+# ---------------------------------------------------------------
+# Sushy / Redfish power state checks
+# ---------------------------------------------------------------
+check-power-lab1:
+	@echo "==> lab1 power state (via sushy Redfish):"
+	@curl -sk -u admin:admin \
+	  $(SUSHY_URL)/redfish/v1/Systems/$(LAB1_SYSTEM_ID) \
+	  | python3 -c "import sys,json; d=json.load(sys.stdin); \
+	    print('  Name:', d.get('Name','?'), '| PowerState:', d.get('PowerState','unknown'))"
+
+check-power-lab2:
+	@echo "==> lab2 power state (via sushy Redfish):"
+	@curl -sk -u admin:admin \
+	  $(SUSHY_URL)/redfish/v1/Systems/$(LAB2_SYSTEM_ID) \
+	  | python3 -c "import sys,json; d=json.load(sys.stdin); \
+	    print('  Name:', d.get('Name','?'), '| PowerState:', d.get('PowerState','unknown'))"
+
+# ---------------------------------------------------------------
+# BMH checks
+# ---------------------------------------------------------------
+check-bmh:
+	@echo "==> BareMetalHost in $(BMH_NS):"
+	@oc get bmh -n $(BMH_NS) \
+	  -o custom-columns="NAME:.metadata.name,STATE:.status.provisioning.state,ONLINE:.spec.online,POWERED:.status.poweredOn,ERROR:.status.errorMessage" \
+	  2>/dev/null || echo "  No BMH found in $(BMH_NS)"
+
+# ---------------------------------------------------------------
+# Job management
+# ---------------------------------------------------------------
+check-jobs:
+	@echo "==> Loadshedding Jobs on hub (openshift-machine-api):"
+	@oc get jobs -n openshift-machine-api 2>/dev/null \
+	  | grep -E "NAME|loadshedding" || echo "  No loadshedding jobs found"
+
+clean-jobs:
+	@echo "==> Deleting completed loadshedding Jobs from hub..."
+	@oc get jobs -n openshift-machine-api \
+	  -o jsonpath='{range .items[?(@.status.completionTime)]}{.metadata.name}{"\n"}{end}' \
+	  2>/dev/null | grep loadshedding | while read job; do \
+	    echo "  Deleting $$job"; \
+	    oc delete job $$job -n openshift-machine-api; \
+	  done
+	@echo "==> Done."
+
+# ---------------------------------------------------------------
+# Cluster checks
+# ---------------------------------------------------------------
+check-cluster-lab1:
+	@echo "==> lab1 managed cluster status:"
+	@oc get managedcluster lab1 \
+	  -o custom-columns="NAME:.metadata.name,HUB_ACCEPTED:.spec.hubAcceptsClient,JOINED:.status.conditions[?(@.type==\"ManagedClusterJoined\")].status,AVAILABLE:.status.conditions[?(@.type==\"ManagedClusterConditionAvailable\")].status" \
+	  2>/dev/null || echo "  lab1 not found as managed cluster"
 
 # ---------------------------------------------------------------
 # Dashboard
@@ -148,27 +261,6 @@ YAML
 
 dashboard-delete:
 	oc delete namespace $(DASHBOARD_NS) --ignore-not-found
-
-# ---------------------------------------------------------------
-# Manual override targets (use with care)
-# ---------------------------------------------------------------
-shutdown-test:
-	@echo "==> WARNING: This will enable the shutdown policy and trigger cluster drain + power-off."
-	@read -p "Type YES to continue: " confirm && [ "$$confirm" = "YES" ]
-	oc patch policy loadshedding-shutdown-policy -n $(HUB_NS) \
-	  --type=merge -p '{"spec":{"disabled":false}}'
-	oc patch policy loadshedding-restore-policy -n $(HUB_NS) \
-	  --type=merge -p '{"spec":{"disabled":true}}'
-	@echo "==> Shutdown policy enabled. Monitor with: make check-policies"
-
-restore-test:
-	@echo "==> Enabling restore policy — this will power on and uncordon lab1 and lab2."
-	@read -p "Type YES to continue: " confirm && [ "$$confirm" = "YES" ]
-	oc patch policy loadshedding-shutdown-policy -n $(HUB_NS) \
-	  --type=merge -p '{"spec":{"disabled":true}}'
-	oc patch policy loadshedding-restore-policy -n $(HUB_NS) \
-	  --type=merge -p '{"spec":{"disabled":false}}'
-	@echo "==> Restore policy enabled. Monitor with: make check-policies"
 
 # ---------------------------------------------------------------
 # Lint
