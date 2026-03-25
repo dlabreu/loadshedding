@@ -1,13 +1,18 @@
 ---
-# ACM Policy: loadshedding-restore-policy (revised)
+# ACM Policy: loadshedding-restore-policy
 #
-# Mirrors the shutdown policy in reverse:
-#   1. Set BareMetalHost spec.online: true — baremetal-operator issues IPMI power-on
-#   2. Once the node is up, mark it schedulable (unschedulable: false)
-#   3. Verify critical cluster operators are Available (inform only — surfaces in ACM console)
-#   4. Ensures the shutdown policy is disabled (mutual exclusion guard)
+# Targets lab1 and lab2 (managed clusters).
+# Handles:
+#   1. Uncordon the node once it is back up
+#   2. Verify cluster operators are healthy (inform only)
 #
-# Deploy to Hub: oc apply -f restore-policy.yml -n open-cluster-management
+# Note: Mutual exclusion (disabling shutdown policy) is handled by
+# the AAP notify playbook, not here. The shutdown policy cannot be
+# managed from within a policy that runs on the managed cluster
+# because open-cluster-management namespace does not exist there.
+#
+# The Redfish power-on is handled by loadshedding-poweron-hub-policy
+# which targets local-cluster (the hub itself).
 
 apiVersion: policy.open-cluster-management.io/v1
 kind: Policy
@@ -23,29 +28,7 @@ spec:
   disabled: true
   remediationAction: enforce
   policy-templates:
-
-    # Step 1: Power on via BareMetalHost (IPMI)
-    - objectDefinition:
-        apiVersion: policy.open-cluster-management.io/v1
-        kind: ConfigurationPolicy
-        metadata:
-          name: power-on-via-bmh
-        spec:
-          remediationAction: enforce
-          severity: high
-          object-templates:
-            - complianceType: musthave
-              objectDefinition:
-                apiVersion: metal3.io/v1alpha1
-                kind: BareMetalHost
-                metadata:
-                  namespace: openshift-machine-api
-                  name: '{{ fromSecret "open-cluster-management-agent" "hub-kubeconfig-secret" "cluster-name" | base64dec }}'
-                spec:
-                  online: true
-
-    # Step 2: Uncordon — node schedulable again
-    # evaluationInterval gives the node ~10 min to boot before ACM checks compliance.
+    # Step 1: Uncordon — node schedulable again
     - objectDefinition:
         apiVersion: policy.open-cluster-management.io/v1
         kind: ConfigurationPolicy
@@ -54,9 +37,6 @@ spec:
         spec:
           remediationAction: enforce
           severity: high
-          evaluationInterval:
-            compliant: 10m
-            noncompliant: 2m
           object-templates:
             - complianceType: musthave
               objectDefinition:
@@ -67,7 +47,8 @@ spec:
                 spec:
                   unschedulable: false
 
-    # Step 3: Verify critical operators are healthy (inform — shows in ACM console)
+    # Step 2: Verify cluster operators healthy (inform only)
+    # Shows compliance in ACM console — does not enforce or block
     - objectDefinition:
         apiVersion: policy.open-cluster-management.io/v1
         kind: ConfigurationPolicy
@@ -118,26 +99,6 @@ spec:
                     - type: Available
                       status: "True"
 
-    # Step 4: Mutual exclusion — ensure shutdown policy is disabled
-    - objectDefinition:
-        apiVersion: policy.open-cluster-management.io/v1
-        kind: ConfigurationPolicy
-        metadata:
-          name: shutdown-policy-disabled
-        spec:
-          remediationAction: enforce
-          severity: medium
-          object-templates:
-            - complianceType: musthave
-              objectDefinition:
-                apiVersion: policy.open-cluster-management.io/v1
-                kind: Policy
-                metadata:
-                  name: loadshedding-shutdown-policy
-                  namespace: open-cluster-management
-                spec:
-                  disabled: true
-
 ---
 apiVersion: apps.open-cluster-management.io/v1
 kind: PlacementRule
@@ -165,5 +126,114 @@ placementRef:
   apiGroup: apps.open-cluster-management.io
 subjects:
   - name: loadshedding-restore-policy
+    kind: Policy
+    apiGroup: policy.open-cluster-management.io
+
+---
+# ACM Policy: loadshedding-poweron-hub-policy
+#
+# Targets local-cluster (the HUB) and runs the Redfish power-on Job.
+# Must be enabled at the same time as loadshedding-restore-policy.
+
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: loadshedding-poweron-hub-policy
+  namespace: open-cluster-management
+  annotations:
+    policy.open-cluster-management.io/standards: "custom"
+    policy.open-cluster-management.io/categories: "power-management"
+    policy.open-cluster-management.io/controls: "loadshedding-protection"
+    loadshedding.io/managed-by: "eda-ansible-automation"
+spec:
+  disabled: true
+  remediationAction: enforce
+  policy-templates:
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: power-on-via-redfish
+        spec:
+          remediationAction: enforce
+          severity: high
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: batch/v1
+                kind: Job
+                metadata:
+                  name: loadshedding-power-on-lab1
+                  namespace: openshift-machine-api
+                  labels:
+                    loadshedding.io/managed-by: acm-policy
+                    loadshedding.io/cluster: lab1
+                spec:
+                  ttlSecondsAfterFinished: 600
+                  template:
+                    spec:
+                      restartPolicy: OnFailure
+                      containers:
+                        - name: redfish-power-on
+                          image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+                          command:
+                            - /bin/sh
+                            - -c
+                            - |
+                              microdnf install -y curl --nodocs 2>/dev/null
+
+                              BMC_URL="https://192.168.22.157:8000"
+                              SYSTEM_ID="bca393c5-d932-42ab-9c37-a6f19d4322f8"
+                              BMC_USER="admin"
+                              BMC_PASS="admin"
+
+                              echo "Checking current power state of lab1..."
+                              POWER=$(curl -sk -u "${BMC_USER}:${BMC_PASS}" \
+                                "${BMC_URL}/redfish/v1/Systems/${SYSTEM_ID}" \
+                                | grep -o '"PowerState":"[^"]*"' \
+                                | cut -d'"' -f4)
+                              echo "Current power state: $POWER"
+
+                              if [ "$POWER" = "On" ]; then
+                                echo "lab1 is already powered on."
+                                exit 0
+                              fi
+
+                              echo "Sending power-on to lab1..."
+                              curl -sk -u "${BMC_USER}:${BMC_PASS}" \
+                                -X POST \
+                                -H "Content-Type: application/json" \
+                                -d '{"ResetType":"On"}' \
+                                "${BMC_URL}/redfish/v1/Systems/${SYSTEM_ID}/Actions/ComputerSystem.Reset"
+
+                              echo "Waiting for lab1 to power on..."
+                              for i in $(seq 1 36); do
+                                sleep 15
+                                POWER=$(curl -sk -u "${BMC_USER}:${BMC_PASS}" \
+                                  "${BMC_URL}/redfish/v1/Systems/${SYSTEM_ID}" \
+                                  | grep -o '"PowerState":"[^"]*"' \
+                                  | cut -d'"' -f4)
+                                echo "Power state check $i/36: $POWER"
+                                if [ "$POWER" = "On" ]; then
+                                  echo "lab1 powered on successfully."
+                                  exit 0
+                                fi
+                              done
+
+                              echo "ERROR: lab1 did not power on within timeout."
+                              exit 1
+
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: loadshedding-poweron-hub-binding
+  namespace: open-cluster-management
+placementRef:
+  name: loadshedding-hub-placement
+  kind: PlacementRule
+  apiGroup: apps.open-cluster-management.io
+subjects:
+  - name: loadshedding-poweron-hub-policy
     kind: Policy
     apiGroup: policy.open-cluster-management.io

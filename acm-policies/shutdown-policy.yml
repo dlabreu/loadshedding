@@ -1,20 +1,14 @@
 ---
-# ACM Policy: loadshedding-shutdown-policy (revised)
+# ACM Policy: loadshedding-shutdown-policy
 #
-# ACM enforces this on lab1 and lab2. It does three things:
-#   1. Cordon the SNO node (unschedulable: true) via ConfigurationPolicy
-#   2. Run a drain Job on the managed cluster to evict workloads
-#   3. Set BareMetalHost spec.online: false — baremetal-operator issues IPMI power-off
+# This policy targets lab1 (managed cluster) and handles:
+#   1. Cordon the SNO node
+#   2. Drain workloads gracefully
 #
-# Prerequisites on each managed cluster:
-#   - metal3.io/baremetal-operator running (installed by default with OCP on baremetal)
-#   - BareMetalHost CR exists in openshift-machine-api (created at OCP install time)
-#   - IPMI credentials in the Secret referenced by the BareMetalHost
+# The Redfish power-off is handled by loadshedding-poweroff-hub-policy
+# which targets local-cluster (the hub itself).
 #
-# Find your BMH name: oc get bmh -n openshift-machine-api
-# For SNO it is typically the hostname set during install.
-#
-# Deploy to Hub: oc apply -f shutdown-policy.yml -n open-cluster-management
+# Deploy: oc apply -f shutdown-policy.yml -n open-cluster-management
 
 apiVersion: policy.open-cluster-management.io/v1
 kind: Policy
@@ -30,8 +24,7 @@ spec:
   disabled: true
   remediationAction: enforce
   policy-templates:
-
-    # Step 1: Cordon — node unschedulable
+    # Step 1: Cordon — mark SNO node unschedulable
     - objectDefinition:
         apiVersion: policy.open-cluster-management.io/v1
         kind: ConfigurationPolicy
@@ -50,7 +43,7 @@ spec:
                 spec:
                   unschedulable: true
 
-    # Step 2: Drain — Job evicts non-daemonset pods
+    # Step 2: Drain — evict all non-daemonset pods gracefully
     - objectDefinition:
         apiVersion: policy.open-cluster-management.io/v1
         kind: ConfigurationPolicy
@@ -83,7 +76,8 @@ spec:
                             - /bin/sh
                             - -c
                             - |
-                              NODE=$(oc get node -o jsonpath='{.items[0].metadata.name}')
+                              NODE=$(oc get node \
+                                -o jsonpath='{.items[0].metadata.name}')
                               echo "Draining node: $NODE"
                               oc adm drain "$NODE" \
                                 --ignore-daemonsets \
@@ -95,32 +89,8 @@ spec:
                             - name: HOME
                               value: /tmp
 
-    # Step 3: Power off via BareMetalHost (IPMI)
-    # evaluationInterval gives the drain Job ~5 min to finish first.
-    - objectDefinition:
-        apiVersion: policy.open-cluster-management.io/v1
-        kind: ConfigurationPolicy
-        metadata:
-          name: power-off-via-bmh
-        spec:
-          remediationAction: enforce
-          severity: high
-          evaluationInterval:
-            compliant: 5m
-            noncompliant: 1m
-          object-templates:
-            - complianceType: musthave
-              objectDefinition:
-                apiVersion: metal3.io/v1alpha1
-                kind: BareMetalHost
-                metadata:
-                  namespace: openshift-machine-api
-                  # Replace with your actual BMH name if it differs from the cluster name
-                  name: '{{ fromSecret "open-cluster-management-agent" "hub-kubeconfig-secret" "cluster-name" | base64dec }}'
-                spec:
-                  online: false
-
 ---
+# PlacementRule: target lab1 and lab2 managed clusters
 apiVersion: apps.open-cluster-management.io/v1
 kind: PlacementRule
 metadata:
@@ -150,5 +120,144 @@ placementRef:
   apiGroup: apps.open-cluster-management.io
 subjects:
   - name: loadshedding-shutdown-policy
+    kind: Policy
+    apiGroup: policy.open-cluster-management.io
+
+---
+# ACM Policy: loadshedding-poweroff-hub-policy
+#
+# This policy targets local-cluster (the HUB itself) and runs the
+# Redfish power-off Job directly on the hub cluster.
+# This is necessary because the sushy endpoint is only reachable
+# from the hub network, and the Job needs to run where it can
+# reach 192.168.22.157:8000.
+#
+# Must be enabled at the same time as loadshedding-shutdown-policy.
+
+apiVersion: policy.open-cluster-management.io/v1
+kind: Policy
+metadata:
+  name: loadshedding-poweroff-hub-policy
+  namespace: open-cluster-management
+  annotations:
+    policy.open-cluster-management.io/standards: "custom"
+    policy.open-cluster-management.io/categories: "power-management"
+    policy.open-cluster-management.io/controls: "loadshedding-protection"
+    loadshedding.io/managed-by: "eda-ansible-automation"
+spec:
+  disabled: true
+  remediationAction: enforce
+  policy-templates:
+    # Power off via direct Redfish call to sushy
+    # evaluationInterval gives the drain Job ~10 min to complete first
+    - objectDefinition:
+        apiVersion: policy.open-cluster-management.io/v1
+        kind: ConfigurationPolicy
+        metadata:
+          name: power-off-via-redfish
+        spec:
+          remediationAction: enforce
+          severity: high
+          evaluationInterval:
+            compliant: 10m
+            noncompliant: 2m
+          object-templates:
+            - complianceType: musthave
+              objectDefinition:
+                apiVersion: batch/v1
+                kind: Job
+                metadata:
+                  name: loadshedding-power-off-lab1
+                  namespace: openshift-machine-api
+                  labels:
+                    loadshedding.io/managed-by: acm-policy
+                    loadshedding.io/cluster: lab1
+                spec:
+                  ttlSecondsAfterFinished: 600
+                  template:
+                    spec:
+                      restartPolicy: OnFailure
+                      containers:
+                        - name: redfish-power-off
+                          image: registry.access.redhat.com/ubi9/ubi-minimal:latest
+                          command:
+                            - /bin/sh
+                            - -c
+                            - |
+                              microdnf install -y curl --nodocs 2>/dev/null
+
+                              BMC_URL="https://192.168.22.157:8000"
+                              SYSTEM_ID="bca393c5-d932-42ab-9c37-a6f19d4322f8"
+                              BMC_USER="admin"
+                              BMC_PASS="admin"
+
+                              echo "Checking current power state of lab1..."
+                              POWER=$(curl -sk -u "${BMC_USER}:${BMC_PASS}" \
+                                "${BMC_URL}/redfish/v1/Systems/${SYSTEM_ID}" \
+                                | grep -o '"PowerState":"[^"]*"' \
+                                | cut -d'"' -f4)
+                              echo "Current power state: $POWER"
+
+                              if [ "$POWER" = "Off" ]; then
+                                echo "lab1 is already powered off."
+                                exit 0
+                              fi
+
+                              echo "Sending GracefulShutdown to lab1..."
+                              curl -sk -u "${BMC_USER}:${BMC_PASS}" \
+                                -X POST \
+                                -H "Content-Type: application/json" \
+                                -d '{"ResetType":"GracefulShutdown"}' \
+                                "${BMC_URL}/redfish/v1/Systems/${SYSTEM_ID}/Actions/ComputerSystem.Reset"
+
+                              echo "Waiting for lab1 to power off..."
+                              for i in $(seq 1 24); do
+                                sleep 10
+                                POWER=$(curl -sk -u "${BMC_USER}:${BMC_PASS}" \
+                                  "${BMC_URL}/redfish/v1/Systems/${SYSTEM_ID}" \
+                                  | grep -o '"PowerState":"[^"]*"' \
+                                  | cut -d'"' -f4)
+                                echo "Power state check $i/24: $POWER"
+                                if [ "$POWER" = "Off" ]; then
+                                  echo "lab1 powered off successfully."
+                                  exit 0
+                                fi
+                              done
+
+                              echo "Graceful shutdown timed out. Sending ForceOff..."
+                              curl -sk -u "${BMC_USER}:${BMC_PASS}" \
+                                -X POST \
+                                -H "Content-Type: application/json" \
+                                -d '{"ResetType":"ForceOff"}' \
+                                "${BMC_URL}/redfish/v1/Systems/${SYSTEM_ID}/Actions/ComputerSystem.Reset"
+                              echo "ForceOff sent."
+
+---
+# PlacementRule: target local-cluster (the hub) only
+apiVersion: apps.open-cluster-management.io/v1
+kind: PlacementRule
+metadata:
+  name: loadshedding-hub-placement
+  namespace: open-cluster-management
+spec:
+  clusterSelector:
+    matchExpressions:
+      - key: name
+        operator: In
+        values:
+          - local-cluster
+
+---
+apiVersion: policy.open-cluster-management.io/v1
+kind: PlacementBinding
+metadata:
+  name: loadshedding-poweroff-hub-binding
+  namespace: open-cluster-management
+placementRef:
+  name: loadshedding-hub-placement
+  kind: PlacementRule
+  apiGroup: apps.open-cluster-management.io
+subjects:
+  - name: loadshedding-poweroff-hub-policy
     kind: Policy
     apiGroup: policy.open-cluster-management.io
