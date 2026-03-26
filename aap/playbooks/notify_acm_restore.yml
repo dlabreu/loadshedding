@@ -1,23 +1,31 @@
 ---
 # Playbook: Notify ACM — Restore
-# Disables the shutdown policy and enables the restore policy.
-# ACM then handles: BareMetalHost IPMI power-on, uncordon, health check.
+# Enables the restore policy PAIR on the ACM hub.
+# ACM then handles: direct Redfish power-on via sushy, uncordon, health check.
+#
+# Variables injected by EDA when triggered automatically:
+#   area_name
+# Has a default so the playbook also works when launched manually
+# from AAP without extra vars.
 
-- name: Enable ACM loadshedding restore policy
+- name: Enable ACM loadshedding restore policies
   hosts: localhost
   gather_facts: false
 
-  tasks:
+  vars:
+    area_name: "manual-trigger"
 
+  tasks:
     - name: Log trigger
       ansible.builtin.debug:
         msg: >
-          Loadshedding ended for {{ area_name }}.
-          Enabling ACM restore policy — ACM will power on and uncordon lab1 and lab2.
+          Loadshedding restore triggered for {{ area_name }}.
+          Enabling ACM restore policy pair — ACM will power on
+          and uncordon lab1 and lab2 via direct Redfish.
 
-    - name: Disable ACM shutdown policy
+    - name: Disable ACM shutdown policy pair first
       ansible.builtin.uri:
-        url: "{{ acm_hub_url }}/apis/policy.open-cluster-management.io/v1/namespaces/open-cluster-management/policies/loadshedding-shutdown-policy"
+        url: "{{ acm_hub_url }}/apis/policy.open-cluster-management.io/v1/namespaces/open-cluster-management/policies/{{ item }}"
         method: PATCH
         headers:
           Authorization: "Bearer {{ acm_token }}"
@@ -26,12 +34,15 @@
         body:
           spec:
             disabled: true
-        validate_certs: true
+        validate_certs: false
         status_code: [200, 201, 204]
+      loop:
+        - loadshedding-shutdown-policy
+        - loadshedding-poweroff-hub-policy
 
-    - name: Enable ACM restore policy
+    - name: Enable ACM restore policy pair
       ansible.builtin.uri:
-        url: "{{ acm_hub_url }}/apis/policy.open-cluster-management.io/v1/namespaces/open-cluster-management/policies/loadshedding-restore-policy"
+        url: "{{ acm_hub_url }}/apis/policy.open-cluster-management.io/v1/namespaces/open-cluster-management/policies/{{ item }}"
         method: PATCH
         headers:
           Authorization: "Bearer {{ acm_token }}"
@@ -44,9 +55,15 @@
               loadshedding.io/area: "{{ area_name }}"
           spec:
             disabled: false
-        validate_certs: true
+        validate_certs: false
         status_code: [200, 201, 204]
+      loop:
+        - loadshedding-restore-policy
+        - loadshedding-poweron-hub-policy
 
     - name: Confirm
       ansible.builtin.debug:
-        msg: "ACM restore policy enabled. ACM will now power on and uncordon lab1 and lab2 via BareMetalHost."
+        msg: >
+          ACM restore policy pair enabled.
+          loadshedding-restore-policy and loadshedding-poweron-hub-policy
+          are now active. ACM will power on and uncordon lab1 and lab2.

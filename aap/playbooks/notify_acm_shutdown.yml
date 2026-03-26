@@ -1,25 +1,51 @@
 ---
 # Playbook: Notify ACM — Shutdown
-# This is the ONLY thing AAP does. It enables the ACM shutdown policy
-# and annotates it with the outage window so ACM can act.
-# ACM then handles: cordon, drain, and BareMetalHost IPMI power-off.
+# Enables the shutdown policy PAIR on the ACM hub.
+# ACM then handles: cordon, drain, and direct Redfish power-off via sushy.
+#
+# Variables injected by EDA when triggered automatically:
+#   area_name, loadshedding_start, loadshedding_end
+# These have defaults so the playbook also works when launched manually
+# from AAP without extra vars.
 
-- name: Enable ACM loadshedding shutdown policy
+- name: Enable ACM loadshedding shutdown policies
   hosts: localhost
   gather_facts: false
 
-  tasks:
+  vars:
+    area_name: "manual-trigger"
+    loadshedding_start: "unknown"
+    loadshedding_end: "unknown"
 
+  tasks:
     - name: Log trigger
       ansible.builtin.debug:
         msg: >
-          Loadshedding approaching for {{ area_name }}.
-          Window: {{ loadshedding_start }} → {{ loadshedding_end }}.
-          Enabling ACM shutdown policy — ACM will cordon, drain and power off lab1 and lab2.
+          Loadshedding shutdown triggered for {{ area_name }}.
+          Window: {{ loadshedding_start }} to {{ loadshedding_end }}.
+          Enabling ACM shutdown policy pair — ACM will cordon, drain
+          and power off lab1 and lab2 via direct Redfish.
 
-    - name: Enable ACM shutdown policy and annotate outage window
+    - name: Disable ACM restore policy pair first
       ansible.builtin.uri:
-        url: "{{ acm_hub_url }}/apis/policy.open-cluster-management.io/v1/namespaces/open-cluster-management/policies/loadshedding-shutdown-policy"
+        url: "{{ acm_hub_url }}/apis/policy.open-cluster-management.io/v1/namespaces/open-cluster-management/policies/{{ item }}"
+        method: PATCH
+        headers:
+          Authorization: "Bearer {{ acm_token }}"
+          Content-Type: "application/merge-patch+json"
+        body_format: json
+        body:
+          spec:
+            disabled: true
+        validate_certs: false
+        status_code: [200, 201, 204]
+      loop:
+        - loadshedding-restore-policy
+        - loadshedding-poweron-hub-policy
+
+    - name: Enable ACM shutdown policy pair
+      ansible.builtin.uri:
+        url: "{{ acm_hub_url }}/apis/policy.open-cluster-management.io/v1/namespaces/open-cluster-management/policies/{{ item }}"
         method: PATCH
         headers:
           Authorization: "Bearer {{ acm_token }}"
@@ -34,23 +60,15 @@
               loadshedding.io/area: "{{ area_name }}"
           spec:
             disabled: false
-        validate_certs: true
+        validate_certs: false
         status_code: [200, 201, 204]
-
-    - name: Disable ACM restore policy (cannot be active at same time)
-      ansible.builtin.uri:
-        url: "{{ acm_hub_url }}/apis/policy.open-cluster-management.io/v1/namespaces/open-cluster-management/policies/loadshedding-restore-policy"
-        method: PATCH
-        headers:
-          Authorization: "Bearer {{ acm_token }}"
-          Content-Type: "application/merge-patch+json"
-        body_format: json
-        body:
-          spec:
-            disabled: true
-        validate_certs: true
-        status_code: [200, 201, 204]
+      loop:
+        - loadshedding-shutdown-policy
+        - loadshedding-poweroff-hub-policy
 
     - name: Confirm
       ansible.builtin.debug:
-        msg: "ACM shutdown policy enabled. ACM will now drain and power off lab1 and lab2 via BareMetalHost."
+        msg: >
+          ACM shutdown policy pair enabled.
+          loadshedding-shutdown-policy and loadshedding-poweroff-hub-policy
+          are now active. ACM will cordon, drain and power off lab1 and lab2.
