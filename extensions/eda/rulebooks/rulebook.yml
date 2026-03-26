@@ -4,14 +4,13 @@
 
   sources:
     - name: eskomsepush_monitor
-      abreu.loadshedding.eskomsepush_source:
+      eskomsepush_source:
         api_token: "{{ eskomsepush_api_token }}"
         area_id: "{{ eskomsepush_area_id | default('capetown-10-atlantis') }}"
         warning_minutes: "{{ warning_minutes | default(30) }}"
         poll_interval: "{{ poll_interval | default(3600) }}"
 
   rules:
-
     - name: Graceful shutdown on approaching loadshedding
       condition: event.type == "loadshedding_approaching"
       action:
