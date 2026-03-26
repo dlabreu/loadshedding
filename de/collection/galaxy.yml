@@ -1,0 +1,11 @@
+namespace: abreu
+name: loadshedding
+version: 1.0.0
+readme: README.md
+description: EDA event source for EskomSePush loadshedding monitoring
+authors:
+  - Daniel Abreu
+tags:
+  - eda
+  - loadshedding
+  - eskomsepush
