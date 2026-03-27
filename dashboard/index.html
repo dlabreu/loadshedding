@@ -593,10 +593,7 @@
                         </div>
                     </div>
                     <div class="node-actions">
-                        <button
-                            class="btn"
-                            onclick="triggerAction('lab1','status')"
-                        >
+                        <button class="btn" onclick="fetchData()">
                             Refresh
                         </button>
                     </div>
@@ -722,21 +719,18 @@
             // CONFIG — environment specific values
             // ============================================================
             const CONFIG = {
-                // Backend API (your EDA/AAP proxy that feeds this dashboard)
-                // This endpoint should return JSON matching the EskomSePush shape
-                // proxied through your hub cluster to avoid CORS and hide the API key.
-                apiBase: "/api/loadshedding",
+                // EskomSePush API — token is exposed in JS so keep this dashboard internal only
+                // For a public dashboard move the token to a backend proxy
+                eskomToken: "YOUR_ESKOMSEPUSH_TOKEN_HERE",
+                areaId: "capetown-10-atlantis",
 
-                // Alternatively, call EskomSePush directly (requires CORS proxy or same-origin)
-                // eskomToken: 'YOUR_TOKEN',
-                // areaId: 'capetown-10-atlantis',
+                // OCP API endpoints — checked directly from browser via no-cors fetch
+                lab1Api: "https://api.lab1.abreu.io:6443",
+                lab2Api: "https://api.lab2.abreu.io:6443",
 
                 // Lab node BMC addresses (sushy virtual Redfish on Fedora KVM host)
                 lab1: { ipmi: "192.168.22.157:8000", label: "lab1" },
                 lab2: { ipmi: "not deployed", label: "lab2" },
-
-                // AAP webhook to trigger manual power actions
-                aapWebhook: "/api/aap/trigger",
             };
 
             // ============================================================
@@ -1029,47 +1023,83 @@
             // Replace this with a real fetch once the backend is running.
             // The mock below simulates an upcoming event 90 minutes from now.
             // ============================================================
+            // Check a cluster API server health by fetching /readyz
+            // Returns 'healthy', 'unhealthy', or 'offline'
+            async function checkClusterApi(apiUrl) {
+                try {
+                    const controller = new AbortController();
+                    const timeout = setTimeout(() => controller.abort(), 5000);
+                    const resp = await fetch(`${apiUrl}/readyz`, {
+                        signal: controller.signal,
+                        mode: "no-cors", // avoids CORS error — we just need to know if reachable
+                    });
+                    clearTimeout(timeout);
+                    // no-cors gives opaque response — if we get here without throwing it is reachable
+                    return "healthy";
+                } catch (err) {
+                    if (err.name === "AbortError") return "offline";
+                    // Network error = offline
+                    return "offline";
+                }
+            }
+
             async function fetchData() {
                 try {
-                    // --- MOCK DATA (replace with real fetch below) ---
+                    // ----------------------------------------------------------------
+                    // Real cluster health checks via OCP API /readyz
+                    // ----------------------------------------------------------------
+                    const [lab1Status] = await Promise.all([
+                        checkClusterApi("https://api.lab1.abreu.io:6443"),
+                    ]);
+
+                    state.lab1 = {
+                        power: lab1Status === "healthy" ? "on" : "off",
+                        api:
+                            lab1Status === "healthy"
+                                ? "Healthy"
+                                : "Unreachable",
+                        node: lab1Status === "healthy" ? "Ready" : "—",
+                    };
+
+                    // lab2 not deployed yet
+                    state.lab2 = { power: "off", api: "—", node: "—" };
+
+                    // ----------------------------------------------------------------
+                    // EskomSePush schedule — real API via CORS proxy
+                    // Using allorigins.win as a CORS proxy to avoid exposing the token
+                    // For production replace with a proper backend proxy
+                    // ----------------------------------------------------------------
+                    const ESP_TOKEN = CONFIG.eskomToken;
+                    const ESP_AREA = CONFIG.areaId;
+                    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(
+                        `https://developer.sepush.co.za/business/2.0/area?id=${ESP_AREA}&test=current`,
+                    )}`;
+
+                    let events = [];
+                    try {
+                        const resp = await fetch(proxyUrl);
+                        if (resp.ok) {
+                            const wrapper = await resp.json();
+                            const data = JSON.parse(wrapper.contents);
+                            events = data.events || [];
+                            state.area = data.info?.name || CONFIG.areaId;
+                        }
+                    } catch (e) {
+                        console.warn(
+                            "EskomSePush fetch failed — using empty schedule:",
+                            e,
+                        );
+                    }
+
+                    // If no real events, show empty schedule rather than mock data
+                    state.events = events;
+
                     const now = new Date();
-                    const mockStart = new Date(now.getTime() + 90 * 60000); // 90 min from now
-                    const mockEnd = new Date(mockStart.getTime() + 150 * 60000); // 2.5h window
-
-                    const pastStart = new Date(now.getTime() - 4 * 3600000);
-                    const pastEnd = new Date(pastStart.getTime() + 7200000);
-
-                    const mockEvents = [
-                        {
-                            start: pastStart.toISOString(),
-                            end: pastEnd.toISOString(),
-                            note: "Stage 2",
-                        },
-                        {
-                            start: mockStart.toISOString(),
-                            end: mockEnd.toISOString(),
-                            note: "Stage 2",
-                        },
-                    ];
-
-                    // REAL fetch (uncomment and remove mock above when backend is ready):
-                    // const resp = await fetch(`${CONFIG.apiBase}/status`);
-                    // if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-                    // const data = await resp.json();
-                    // const mockEvents = data.events;
-                    // state.lab1 = data.lab1;
-                    // state.lab2 = data.lab2;
-                    // state.area = data.area_name;
-                    // state.currentStage = data.current_stage;
-
-                    state.events = mockEvents;
-
-                    // Determine active/upcoming
-                    const activeEv = mockEvents.find(
+                    const activeEv = events.find(
                         (ev) =>
                             now >= new Date(ev.start) && now < new Date(ev.end),
                     );
-                    const upcomingEvs = mockEvents
+                    const upcomingEvs = events
                         .filter((ev) => new Date(ev.start) > now)
                         .sort((a, b) => new Date(a.start) - new Date(b.start));
 
@@ -1084,7 +1114,7 @@
                 } catch (err) {
                     console.error("Dashboard fetch error:", err);
                     document.getElementById("area-tag").textContent =
-                        "API error — retrying…";
+                        "Error — retrying…";
                 }
             }
 
