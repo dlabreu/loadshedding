@@ -6,11 +6,14 @@ are approaching or ending for a configured area.
 Usage in EDA rulebook:
   sources:
     - name: eskomsepush
-      eskomsepush_source:
+      abreu.loadshedding.eskomsepush_source:
         api_token: "{{ eskomsepush_api_token }}"
         area_id: "capetown-10-atlantis"   # your area ID
         warning_minutes: 30               # alert this many mins before start
-        poll_interval: 300                # seconds between API polls
+        poll_interval: 3600               # seconds between API polls (default 60 min)
+        test_mode: ""                     # "" = production (real data)
+                                          # "current" = simulate active loadshedding
+                                          # "future"  = simulate approaching loadshedding
 """
 
 import asyncio
@@ -27,7 +30,13 @@ async def main(queue: asyncio.Queue, args: dict[str, Any]):
     api_token: str = args["api_token"]
     area_id: str = args["area_id"]
     warning_minutes: int = int(args.get("warning_minutes", 30))
-    poll_interval: int = int(args.get("poll_interval", 300))
+    poll_interval: int = int(args.get("poll_interval", 3600))
+
+    # test_mode controls the EskomSePush API test parameter:
+    #   ""        — no test param — uses real live schedule (production default)
+    #   "current" — returns an event happening right now (simulate active loadshedding)
+    #   "future"  — returns an event starting soon (simulate approaching loadshedding)
+    test_mode: str = args.get("test_mode", "")
 
     headers = {"Token": api_token}
     last_seen_events: set[str] = set()
@@ -35,7 +44,14 @@ async def main(queue: asyncio.Queue, args: dict[str, Any]):
     async with aiohttp.ClientSession(headers=headers) as session:
         while True:
             try:
-                await _poll(session, queue, area_id, warning_minutes, last_seen_events)
+                await _poll(
+                    session,
+                    queue,
+                    area_id,
+                    warning_minutes,
+                    last_seen_events,
+                    test_mode,
+                )
             except Exception as exc:
                 await queue.put(
                     {
@@ -48,9 +64,11 @@ async def main(queue: asyncio.Queue, args: dict[str, Any]):
             await asyncio.sleep(poll_interval)
 
 
-async def _poll(session, queue, area_id, warning_minutes, last_seen):
+async def _poll(session, queue, area_id, warning_minutes, last_seen, test_mode):
     url = f"{ESKOMSEPUSH_BASE}/area"
-    params = {"id": area_id, "test": "current"}  # remove test param in prod
+    params = {"id": area_id}
+    if test_mode:
+        params["test"] = test_mode
 
     async with session.get(url, params=params) as resp:
         resp.raise_for_status()
@@ -125,7 +143,7 @@ async def _poll(session, queue, area_id, warning_minutes, last_seen):
                     }
                 )
 
-        # Ending: when we pass the end time, power can be restored
+        # Ended: when we pass the end time, power can be restored
         if now >= end:
             if f"ended:{event_key}" not in last_seen:
                 last_seen.add(f"ended:{event_key}")
@@ -140,10 +158,6 @@ async def _poll(session, queue, area_id, warning_minutes, last_seen):
                         "timestamp": _now(),
                     }
                 )
-
-    # Prune old keys to prevent unbounded growth
-    cutoff = now - datetime.timedelta(hours=24)
-    # (simplified: a production version would parse keys to filter by date)
 
 
 def _now() -> str:
