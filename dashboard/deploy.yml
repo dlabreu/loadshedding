@@ -1,0 +1,96 @@
+---
+# SNO Loadshedding Dashboard — OpenShift deployment
+#
+# Deploys a static nginx pod serving the dashboard HTML file.
+# The HTML is mounted from a ConfigMap so updates do not require
+# rebuilding any image.
+#
+# Deploy:
+#   oc apply -n loadshedding-dashboard -f dashboard/deploy.yml
+#
+# Prerequisites:
+#   oc create configmap loadshedding-dashboard \
+#     --from-file=index.html=dashboard/index.html \
+#     -n loadshedding-dashboard
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loadshedding-dashboard
+  labels:
+    app: loadshedding-dashboard
+    loadshedding.io/component: dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loadshedding-dashboard
+  template:
+    metadata:
+      labels:
+        app: loadshedding-dashboard
+    spec:
+      containers:
+        - name: nginx
+          image: registry.access.redhat.com/ubi9/nginx-120:latest
+          ports:
+            - containerPort: 8080
+              name: http
+          volumeMounts:
+            - name: html
+              mountPath: /opt/app-root/src
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 30
+      volumes:
+        - name: html
+          configMap:
+            name: loadshedding-dashboard
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: loadshedding-dashboard
+  labels:
+    app: loadshedding-dashboard
+spec:
+  selector:
+    app: loadshedding-dashboard
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+
+---
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: loadshedding-dashboard
+  labels:
+    app: loadshedding-dashboard
+spec:
+  to:
+    kind: Service
+    name: loadshedding-dashboard
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
