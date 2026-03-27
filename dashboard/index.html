@@ -1160,8 +1160,25 @@
             // ============================================================
             // Init
             // ============================================================
-            fetchData();
-            setInterval(fetchData, 300000); // refresh data every 5 min
+            // Split refresh into two separate intervals:
+            //   - OCP API health check every 2 minutes (free — just an HTTP check)
+            //   - EskomSePush schedule every 60 minutes (paid API — matches EDA poll interval)
+
+            async function checkClusterHealth() {
+                const [lab1Status] = await Promise.all([
+                    checkClusterApi("https://api.lab1.abreu.io:6443"),
+                ]);
+                state.lab1 = {
+                    power: lab1Status === "healthy" ? "on" : "off",
+                    api: lab1Status === "healthy" ? "Healthy" : "Unreachable",
+                    node: lab1Status === "healthy" ? "Ready" : "—",
+                };
+                renderAll();
+            }
+
+            fetchData(); // full fetch on load (ESP + OCP)
+            setInterval(checkClusterHealth, 120000); // OCP health check every 2 min
+            setInterval(fetchData, 3600000); // EskomSePush every 60 min
             setInterval(renderCountdown, 1000); // countdown ticks every second
         </script>
     </body>
