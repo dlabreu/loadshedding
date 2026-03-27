@@ -1,912 +1,1138 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>SNO Power Dashboard</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
-<style>
-  :root {
-    --bg: #0a0c10;
-    --surface: #111318;
-    --surface2: #181c24;
-    --border: rgba(255,255,255,0.07);
-    --border-bright: rgba(255,255,255,0.14);
-    --text: #e8eaf0;
-    --text-muted: #6b7280;
-    --text-dim: #3d4350;
-    --green: #22c55e;
-    --green-dim: rgba(34,197,94,0.12);
-    --green-glow: rgba(34,197,94,0.25);
-    --amber: #f59e0b;
-    --amber-dim: rgba(245,158,11,0.12);
-    --red: #ef4444;
-    --red-dim: rgba(239,68,68,0.12);
-    --red-glow: rgba(239,68,68,0.2);
-    --blue: #3b82f6;
-    --blue-dim: rgba(59,130,246,0.1);
-    --mono: 'Space Mono', monospace;
-    --sans: 'DM Sans', sans-serif;
-  }
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>SNO Power Dashboard</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500;600&display=swap"
+            rel="stylesheet"
+        />
+        <style>
+            :root {
+                --bg: #0a0c10;
+                --surface: #111318;
+                --surface2: #181c24;
+                --border: rgba(255, 255, 255, 0.07);
+                --border-bright: rgba(255, 255, 255, 0.14);
+                --text: #e8eaf0;
+                --text-muted: #6b7280;
+                --text-dim: #3d4350;
+                --green: #22c55e;
+                --green-dim: rgba(34, 197, 94, 0.12);
+                --green-glow: rgba(34, 197, 94, 0.25);
+                --amber: #f59e0b;
+                --amber-dim: rgba(245, 158, 11, 0.12);
+                --red: #ef4444;
+                --red-dim: rgba(239, 68, 68, 0.12);
+                --red-glow: rgba(239, 68, 68, 0.2);
+                --blue: #3b82f6;
+                --blue-dim: rgba(59, 130, 246, 0.1);
+                --mono: "Space Mono", monospace;
+                --sans: "DM Sans", sans-serif;
+            }
 
-  * { box-sizing: border-box; margin: 0; padding: 0; }
+            * {
+                box-sizing: border-box;
+                margin: 0;
+                padding: 0;
+            }
 
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--sans);
-    min-height: 100vh;
-    font-size: 14px;
-    line-height: 1.6;
-  }
+            body {
+                background: var(--bg);
+                color: var(--text);
+                font-family: var(--sans);
+                min-height: 100vh;
+                font-size: 14px;
+                line-height: 1.6;
+            }
 
-  /* Subtle grid background */
-  body::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    background-image:
-      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
-    background-size: 40px 40px;
-    pointer-events: none;
-    z-index: 0;
-  }
+            /* Subtle grid background */
+            body::before {
+                content: "";
+                position: fixed;
+                inset: 0;
+                background-image:
+                    linear-gradient(
+                        rgba(255, 255, 255, 0.02) 1px,
+                        transparent 1px
+                    ),
+                    linear-gradient(
+                        90deg,
+                        rgba(255, 255, 255, 0.02) 1px,
+                        transparent 1px
+                    );
+                background-size: 40px 40px;
+                pointer-events: none;
+                z-index: 0;
+            }
 
-  .shell {
-    position: relative;
-    z-index: 1;
-    max-width: 1100px;
-    margin: 0 auto;
-    padding: 32px 24px;
-  }
+            .shell {
+                position: relative;
+                z-index: 1;
+                max-width: 1100px;
+                margin: 0 auto;
+                padding: 32px 24px;
+            }
 
-  /* Header */
-  header {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    margin-bottom: 36px;
-    flex-wrap: wrap;
-    gap: 12px;
-  }
+            /* Header */
+            header {
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
+                margin-bottom: 36px;
+                flex-wrap: wrap;
+                gap: 12px;
+            }
 
-  .logo-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
+            .logo-row {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+            }
 
-  .logo-mark {
-    width: 36px; height: 36px;
-    border: 1.5px solid var(--border-bright);
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-family: var(--mono);
-    font-size: 13px;
-    color: var(--text-muted);
-    letter-spacing: -1px;
-  }
+            .logo-mark {
+                width: 36px;
+                height: 36px;
+                border: 1.5px solid var(--border-bright);
+                border-radius: 8px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-family: var(--mono);
+                font-size: 13px;
+                color: var(--text-muted);
+                letter-spacing: -1px;
+            }
 
-  h1 {
-    font-size: 18px;
-    font-weight: 600;
-    letter-spacing: -0.3px;
-  }
+            h1 {
+                font-size: 18px;
+                font-weight: 600;
+                letter-spacing: -0.3px;
+            }
 
-  .subtitle {
-    font-size: 12px;
-    color: var(--text-muted);
-    font-weight: 300;
-    margin-top: 1px;
-  }
+            .subtitle {
+                font-size: 12px;
+                color: var(--text-muted);
+                font-weight: 300;
+                margin-top: 1px;
+            }
 
-  .last-update {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--text-dim);
-    text-align: right;
-    padding-top: 4px;
-  }
+            .last-update {
+                font-family: var(--mono);
+                font-size: 11px;
+                color: var(--text-dim);
+                text-align: right;
+                padding-top: 4px;
+            }
 
-  /* Stage banner */
-  .stage-banner {
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px 20px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    margin-bottom: 28px;
-    background: var(--surface);
-  }
+            /* Stage banner */
+            .stage-banner {
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: 16px 20px;
+                display: flex;
+                align-items: center;
+                gap: 16px;
+                margin-bottom: 28px;
+                background: var(--surface);
+            }
 
-  .stage-pill {
-    font-family: var(--mono);
-    font-size: 22px;
-    font-weight: 700;
-    min-width: 56px;
-    height: 56px;
-    border-radius: 10px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
+            .stage-pill {
+                font-family: var(--mono);
+                font-size: 22px;
+                font-weight: 700;
+                min-width: 56px;
+                height: 56px;
+                border-radius: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                flex-shrink: 0;
+            }
 
-  .stage-pill.stage-0 { background: var(--green-dim); color: var(--green); border: 1px solid rgba(34,197,94,0.2); }
-  .stage-pill.stage-active { background: var(--red-dim); color: var(--red); border: 1px solid rgba(239,68,68,0.25); }
+            .stage-pill.stage-0 {
+                background: var(--green-dim);
+                color: var(--green);
+                border: 1px solid rgba(34, 197, 94, 0.2);
+            }
+            .stage-pill.stage-active {
+                background: var(--red-dim);
+                color: var(--red);
+                border: 1px solid rgba(239, 68, 68, 0.25);
+            }
 
-  .stage-info { flex: 1; }
-  .stage-label { font-size: 13px; font-weight: 500; }
-  .stage-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+            .stage-info {
+                flex: 1;
+            }
+            .stage-label {
+                font-size: 13px;
+                font-weight: 500;
+            }
+            .stage-desc {
+                font-size: 12px;
+                color: var(--text-muted);
+                margin-top: 2px;
+            }
 
-  .live-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: var(--green);
-    box-shadow: 0 0 0 0 var(--green-glow);
-    animation: pulse 2s ease-in-out infinite;
-    flex-shrink: 0;
-  }
+            .live-dot {
+                width: 8px;
+                height: 8px;
+                border-radius: 50%;
+                background: var(--green);
+                box-shadow: 0 0 0 0 var(--green-glow);
+                animation: pulse 2s ease-in-out infinite;
+                flex-shrink: 0;
+            }
 
-  .live-dot.active { background: var(--red); box-shadow: 0 0 0 0 var(--red-glow); }
+            .live-dot.active {
+                background: var(--red);
+                box-shadow: 0 0 0 0 var(--red-glow);
+            }
 
-  @keyframes pulse {
-    0%, 100% { box-shadow: 0 0 0 0 var(--green-glow); }
-    50% { box-shadow: 0 0 0 6px transparent; }
-  }
+            @keyframes pulse {
+                0%,
+                100% {
+                    box-shadow: 0 0 0 0 var(--green-glow);
+                }
+                50% {
+                    box-shadow: 0 0 0 6px transparent;
+                }
+            }
 
-  /* Section layout */
-  .section-label {
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--text-dim);
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    margin-bottom: 12px;
-  }
+            /* Section layout */
+            .section-label {
+                font-family: var(--mono);
+                font-size: 10px;
+                color: var(--text-dim);
+                letter-spacing: 1.5px;
+                text-transform: uppercase;
+                margin-bottom: 12px;
+            }
 
-  .row-2 {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    margin-bottom: 28px;
-  }
+            .row-2 {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 16px;
+                margin-bottom: 28px;
+            }
 
-  @media (max-width: 640px) {
-    .row-2 { grid-template-columns: 1fr; }
-  }
+            @media (max-width: 640px) {
+                .row-2 {
+                    grid-template-columns: 1fr;
+                }
+            }
 
-  /* Node card */
-  .node-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-    transition: border-color 0.3s;
-  }
+            /* Node card */
+            .node-card {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: 20px;
+                transition: border-color 0.3s;
+            }
 
-  .node-card.online { border-color: rgba(34,197,94,0.2); }
-  .node-card.offline { border-color: rgba(239,68,68,0.18); }
-  .node-card.transitioning { border-color: rgba(245,158,11,0.25); }
+            .node-card.online {
+                border-color: rgba(34, 197, 94, 0.2);
+            }
+            .node-card.offline {
+                border-color: rgba(239, 68, 68, 0.18);
+            }
+            .node-card.transitioning {
+                border-color: rgba(245, 158, 11, 0.25);
+            }
 
-  .node-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 16px;
-  }
+            .node-header {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                margin-bottom: 16px;
+            }
 
-  .node-name {
-    font-family: var(--mono);
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: -0.5px;
-  }
+            .node-name {
+                font-family: var(--mono);
+                font-size: 15px;
+                font-weight: 700;
+                letter-spacing: -0.5px;
+            }
 
-  .status-badge {
-    font-size: 11px;
-    font-weight: 500;
-    padding: 3px 10px;
-    border-radius: 20px;
-    letter-spacing: 0.3px;
-  }
+            .status-badge {
+                font-size: 11px;
+                font-weight: 500;
+                padding: 3px 10px;
+                border-radius: 20px;
+                letter-spacing: 0.3px;
+            }
 
-  .status-badge.online  { background: var(--green-dim); color: var(--green); }
-  .status-badge.offline { background: var(--red-dim);   color: var(--red);   }
-  .status-badge.transitioning { background: var(--amber-dim); color: var(--amber); }
-  .status-badge.unknown { background: rgba(255,255,255,0.05); color: var(--text-muted); }
+            .status-badge.online {
+                background: var(--green-dim);
+                color: var(--green);
+            }
+            .status-badge.offline {
+                background: var(--red-dim);
+                color: var(--red);
+            }
+            .status-badge.transitioning {
+                background: var(--amber-dim);
+                color: var(--amber);
+            }
+            .status-badge.unknown {
+                background: rgba(255, 255, 255, 0.05);
+                color: var(--text-muted);
+            }
 
-  .node-meta {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
+            .node-meta {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 10px;
+            }
 
-  .meta-item {
-    background: var(--surface2);
-    border-radius: 8px;
-    padding: 10px 12px;
-  }
+            .meta-item {
+                background: var(--surface2);
+                border-radius: 8px;
+                padding: 10px 12px;
+            }
 
-  .meta-key {
-    font-size: 10px;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    margin-bottom: 3px;
-    font-family: var(--mono);
-  }
+            .meta-key {
+                font-size: 10px;
+                color: var(--text-dim);
+                text-transform: uppercase;
+                letter-spacing: 0.8px;
+                margin-bottom: 3px;
+                font-family: var(--mono);
+            }
 
-  .meta-val {
-    font-family: var(--mono);
-    font-size: 12px;
-    color: var(--text);
-  }
+            .meta-val {
+                font-family: var(--mono);
+                font-size: 12px;
+                color: var(--text);
+            }
 
-  /* Power action buttons */
-  .node-actions {
-    margin-top: 14px;
-    display: flex;
-    gap: 8px;
-  }
+            /* Power action buttons */
+            .node-actions {
+                margin-top: 14px;
+                display: flex;
+                gap: 8px;
+            }
 
-  .btn {
-    flex: 1;
-    padding: 8px 12px;
-    border-radius: 8px;
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--text-muted);
-    font-family: var(--sans);
-    font-size: 12px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s;
-    text-align: center;
-  }
+            .btn {
+                flex: 1;
+                padding: 8px 12px;
+                border-radius: 8px;
+                border: 1px solid var(--border);
+                background: transparent;
+                color: var(--text-muted);
+                font-family: var(--sans);
+                font-size: 12px;
+                font-weight: 500;
+                cursor: pointer;
+                transition: all 0.15s;
+                text-align: center;
+            }
 
-  .btn:hover { background: var(--surface2); border-color: var(--border-bright); color: var(--text); }
-  .btn.danger:hover { background: var(--red-dim); border-color: rgba(239,68,68,0.3); color: var(--red); }
-  .btn.success:hover { background: var(--green-dim); border-color: rgba(34,197,94,0.3); color: var(--green); }
+            .btn:hover {
+                background: var(--surface2);
+                border-color: var(--border-bright);
+                color: var(--text);
+            }
+            .btn.danger:hover {
+                background: var(--red-dim);
+                border-color: rgba(239, 68, 68, 0.3);
+                color: var(--red);
+            }
+            .btn.success:hover {
+                background: var(--green-dim);
+                border-color: rgba(34, 197, 94, 0.3);
+                color: var(--green);
+            }
 
-  /* Schedule table */
-  .schedule-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    overflow: hidden;
-    margin-bottom: 28px;
-  }
+            /* Schedule table */
+            .schedule-card {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                overflow: hidden;
+                margin-bottom: 28px;
+            }
 
-  .schedule-header {
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
+            .schedule-header {
+                padding: 16px 20px;
+                border-bottom: 1px solid var(--border);
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+            }
 
-  .schedule-header h2 {
-    font-size: 14px;
-    font-weight: 500;
-  }
+            .schedule-header h2 {
+                font-size: 14px;
+                font-weight: 500;
+            }
 
-  .area-tag {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--text-muted);
-    background: var(--surface2);
-    padding: 3px 10px;
-    border-radius: 6px;
-  }
+            .area-tag {
+                font-family: var(--mono);
+                font-size: 11px;
+                color: var(--text-muted);
+                background: var(--surface2);
+                padding: 3px 10px;
+                border-radius: 6px;
+            }
 
-  .schedule-row {
-    display: grid;
-    grid-template-columns: 50px 1fr 1fr 80px 80px;
-    align-items: center;
-    padding: 12px 20px;
-    border-bottom: 1px solid var(--border);
-    font-size: 12px;
-    transition: background 0.15s;
-  }
+            .schedule-row {
+                display: grid;
+                grid-template-columns: 50px 1fr 1fr 80px 80px;
+                align-items: center;
+                padding: 12px 20px;
+                border-bottom: 1px solid var(--border);
+                font-size: 12px;
+                transition: background 0.15s;
+            }
 
-  .schedule-row:last-child { border-bottom: none; }
-  .schedule-row:hover { background: var(--surface2); }
-  .schedule-row.active-row { background: var(--red-dim); }
-  .schedule-row.upcoming-row { background: var(--amber-dim); }
+            .schedule-row:last-child {
+                border-bottom: none;
+            }
+            .schedule-row:hover {
+                background: var(--surface2);
+            }
+            .schedule-row.active-row {
+                background: var(--red-dim);
+            }
+            .schedule-row.upcoming-row {
+                background: var(--amber-dim);
+            }
 
-  .schedule-row.header {
-    background: var(--surface2);
-    font-size: 10px;
-    color: var(--text-dim);
-    text-transform: uppercase;
-    letter-spacing: 0.8px;
-    font-family: var(--mono);
-  }
+            .schedule-row.header {
+                background: var(--surface2);
+                font-size: 10px;
+                color: var(--text-dim);
+                text-transform: uppercase;
+                letter-spacing: 0.8px;
+                font-family: var(--mono);
+            }
 
-  .schedule-row.header:hover { background: var(--surface2); }
+            .schedule-row.header:hover {
+                background: var(--surface2);
+            }
 
-  .stage-num {
-    font-family: var(--mono);
-    font-weight: 700;
-    font-size: 13px;
-  }
+            .stage-num {
+                font-family: var(--mono);
+                font-weight: 700;
+                font-size: 13px;
+            }
 
-  .time-mono {
-    font-family: var(--mono);
-    font-size: 12px;
-  }
+            .time-mono {
+                font-family: var(--mono);
+                font-size: 12px;
+            }
 
-  .event-badge {
-    font-size: 10px;
-    padding: 2px 8px;
-    border-radius: 20px;
-    font-weight: 500;
-    text-align: center;
-  }
+            .event-badge {
+                font-size: 10px;
+                padding: 2px 8px;
+                border-radius: 20px;
+                font-weight: 500;
+                text-align: center;
+            }
 
-  .event-badge.active   { background: var(--red-dim);   color: var(--red);   }
-  .event-badge.upcoming { background: var(--amber-dim); color: var(--amber); }
-  .event-badge.past     { background: rgba(255,255,255,0.04); color: var(--text-dim); }
+            .event-badge.active {
+                background: var(--red-dim);
+                color: var(--red);
+            }
+            .event-badge.upcoming {
+                background: var(--amber-dim);
+                color: var(--amber);
+            }
+            .event-badge.past {
+                background: rgba(255, 255, 255, 0.04);
+                color: var(--text-dim);
+            }
 
-  /* Timeline bar */
-  .timeline-section {
-    margin-bottom: 28px;
-  }
+            /* Timeline bar */
+            .timeline-section {
+                margin-bottom: 28px;
+            }
 
-  .timeline-track {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 20px;
-  }
+            .timeline-track {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: 20px;
+            }
 
-  .timeline-hours {
-    display: grid;
-    grid-template-columns: repeat(24, 1fr);
-    gap: 2px;
-    margin-bottom: 8px;
-  }
+            .timeline-hours {
+                display: grid;
+                grid-template-columns: repeat(24, 1fr);
+                gap: 2px;
+                margin-bottom: 8px;
+            }
 
-  .hour-block {
-    height: 28px;
-    border-radius: 3px;
-    background: var(--surface2);
-    position: relative;
-    transition: background 0.3s;
-  }
+            .hour-block {
+                height: 28px;
+                border-radius: 3px;
+                background: var(--surface2);
+                position: relative;
+                transition: background 0.3s;
+            }
 
-  .hour-block.outage { background: rgba(239,68,68,0.35); }
-  .hour-block.current { outline: 2px solid var(--blue); outline-offset: 1px; }
+            .hour-block.outage {
+                background: rgba(239, 68, 68, 0.35);
+            }
+            .hour-block.current {
+                outline: 2px solid var(--blue);
+                outline-offset: 1px;
+            }
 
-  .timeline-labels {
-    display: flex;
-    justify-content: space-between;
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--text-dim);
-  }
+            .timeline-labels {
+                display: flex;
+                justify-content: space-between;
+                font-family: var(--mono);
+                font-size: 10px;
+                color: var(--text-dim);
+            }
 
-  /* Countdown */
-  .countdown-row {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    margin-bottom: 28px;
-  }
+            /* Countdown */
+            .countdown-row {
+                display: grid;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 12px;
+                margin-bottom: 28px;
+            }
 
-  .countdown-card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 16px;
-    text-align: center;
-  }
+            .countdown-card {
+                background: var(--surface);
+                border: 1px solid var(--border);
+                border-radius: 12px;
+                padding: 16px;
+                text-align: center;
+            }
 
-  .countdown-val {
-    font-family: var(--mono);
-    font-size: 28px;
-    font-weight: 700;
-    line-height: 1;
-    margin-bottom: 4px;
-  }
+            .countdown-val {
+                font-family: var(--mono);
+                font-size: 28px;
+                font-weight: 700;
+                line-height: 1;
+                margin-bottom: 4px;
+            }
 
-  .countdown-label {
-    font-size: 11px;
-    color: var(--text-muted);
-  }
+            .countdown-label {
+                font-size: 11px;
+                color: var(--text-muted);
+            }
 
-  /* Footer */
-  footer {
-    text-align: center;
-    font-size: 11px;
-    color: var(--text-dim);
-    padding-top: 20px;
-    border-top: 1px solid var(--border);
-    font-family: var(--mono);
-  }
-</style>
-</head>
-<body>
-<div class="shell">
+            /* Footer */
+            footer {
+                text-align: center;
+                font-size: 11px;
+                color: var(--text-dim);
+                padding-top: 20px;
+                border-top: 1px solid var(--border);
+                font-family: var(--mono);
+            }
+        </style>
+    </head>
+    <body>
+        <div class="shell">
+            <!-- Header -->
+            <header>
+                <div class="logo-row">
+                    <div class="logo-mark">SNO</div>
+                    <div>
+                        <h1>Lab Cluster Power Dashboard</h1>
+                        <div class="subtitle">
+                            EDA · ACM · EskomSePush · Hub Cluster Monitor
+                        </div>
+                    </div>
+                </div>
+                <div class="last-update">
+                    Last update<br />
+                    <span id="last-update-time">—</span>
+                </div>
+            </header>
 
-  <!-- Header -->
-  <header>
-    <div class="logo-row">
-      <div class="logo-mark">SNO</div>
-      <div>
-        <h1>Lab Cluster Power Dashboard</h1>
-        <div class="subtitle">EDA · ACM · EskomSePush  ·  Hub Cluster Monitor</div>
-      </div>
-    </div>
-    <div class="last-update">
-      Last update<br>
-      <span id="last-update-time">—</span>
-    </div>
-  </header>
+            <!-- Stage banner -->
+            <div class="stage-banner" id="stage-banner">
+                <div class="stage-pill stage-0" id="stage-pill">0</div>
+                <div class="stage-info">
+                    <div class="stage-label" id="stage-label">
+                        No active loadshedding
+                    </div>
+                    <div class="stage-desc" id="stage-desc">
+                        All systems nominal. Next event: checking schedule…
+                    </div>
+                </div>
+                <div class="live-dot" id="live-dot"></div>
+            </div>
 
-  <!-- Stage banner -->
-  <div class="stage-banner" id="stage-banner">
-    <div class="stage-pill stage-0" id="stage-pill">0</div>
-    <div class="stage-info">
-      <div class="stage-label" id="stage-label">No active loadshedding</div>
-      <div class="stage-desc" id="stage-desc">All systems nominal. Next event: checking schedule…</div>
-    </div>
-    <div class="live-dot" id="live-dot"></div>
-  </div>
+            <!-- Node cards -->
+            <div class="section-label">Managed clusters</div>
+            <div class="row-2">
+                <div class="node-card online" id="card-lab1">
+                    <div class="node-header">
+                        <span class="node-name">lab1</span>
+                        <span class="status-badge online" id="badge-lab1"
+                            >Online</span
+                        >
+                    </div>
+                    <div class="node-meta">
+                        <div class="meta-item">
+                            <div class="meta-key">BMC (sushy)</div>
+                            <div class="meta-val" id="ipmi-lab1">
+                                192.168.22.157:8000
+                            </div>
+                        </div>
+                        <div class="meta-item">
+                            <div class="meta-key">Power</div>
+                            <div class="meta-val" id="power-lab1">ON</div>
+                        </div>
+                        <div class="meta-item">
+                            <div class="meta-key">OCP API</div>
+                            <div class="meta-val" id="api-lab1">Healthy</div>
+                        </div>
+                        <div class="meta-item">
+                            <div class="meta-key">Node</div>
+                            <div class="meta-val" id="node-lab1">Ready</div>
+                        </div>
+                    </div>
+                    <div class="node-actions">
+                        <button
+                            class="btn"
+                            onclick="triggerAction('lab1','status')"
+                        >
+                            Refresh
+                        </button>
+                    </div>
+                </div>
 
-  <!-- Node cards -->
-  <div class="section-label">Managed clusters</div>
-  <div class="row-2">
+                <div
+                    class="node-card offline"
+                    id="card-lab2"
+                    style="opacity: 0.5"
+                >
+                    <div class="node-header">
+                        <span class="node-name">lab2</span>
+                        <span class="status-badge offline" id="badge-lab2"
+                            >Not deployed</span
+                        >
+                    </div>
+                    <div class="node-meta">
+                        <div class="meta-item">
+                            <div class="meta-key">BMC (sushy)</div>
+                            <div class="meta-val" id="ipmi-lab2">—</div>
+                        </div>
+                        <div class="meta-item">
+                            <div class="meta-key">Power</div>
+                            <div class="meta-val" id="power-lab2">—</div>
+                        </div>
+                        <div class="meta-item">
+                            <div class="meta-key">OCP API</div>
+                            <div class="meta-val" id="api-lab2">—</div>
+                        </div>
+                        <div class="meta-item">
+                            <div class="meta-key">Node</div>
+                            <div class="meta-val" id="node-lab2">—</div>
+                        </div>
+                    </div>
+                    <div class="node-actions">
+                        <button class="btn" disabled>Refresh</button>
+                    </div>
+                </div>
+            </div>
 
-    <div class="node-card online" id="card-lab1">
-      <div class="node-header">
-        <span class="node-name">lab1</span>
-        <span class="status-badge online" id="badge-lab1">Online</span>
-      </div>
-      <div class="node-meta">
-        <div class="meta-item">
-          <div class="meta-key">IPMI</div>
-          <div class="meta-val" id="ipmi-lab1">192.168.10.11</div>
+            <!-- Countdown -->
+            <div class="section-label">Next outage countdown</div>
+            <div class="countdown-row">
+                <div class="countdown-card">
+                    <div
+                        class="countdown-val"
+                        id="cd-hours"
+                        style="color: var(--amber)"
+                    >
+                        --
+                    </div>
+                    <div class="countdown-label">hours</div>
+                </div>
+                <div class="countdown-card">
+                    <div
+                        class="countdown-val"
+                        id="cd-mins"
+                        style="color: var(--amber)"
+                    >
+                        --
+                    </div>
+                    <div class="countdown-label">minutes</div>
+                </div>
+                <div class="countdown-card">
+                    <div
+                        class="countdown-val"
+                        id="cd-secs"
+                        style="color: var(--amber)"
+                    >
+                        --
+                    </div>
+                    <div class="countdown-label">seconds</div>
+                </div>
+            </div>
+
+            <!-- 24-hour timeline -->
+            <div class="timeline-section">
+                <div class="section-label">Today's outage timeline</div>
+                <div class="timeline-track">
+                    <div class="timeline-hours" id="timeline-hours"></div>
+                    <div class="timeline-labels">
+                        <span>00:00</span><span>06:00</span><span>12:00</span
+                        ><span>18:00</span><span>23:59</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Schedule table -->
+            <div class="section-label">Upcoming events</div>
+            <div class="schedule-card">
+                <div class="schedule-header">
+                    <h2>EskomSePush Schedule</h2>
+                    <span class="area-tag" id="area-tag">Loading…</span>
+                </div>
+                <div class="schedule-row header">
+                    <span>Stage</span>
+                    <span>Start</span>
+                    <span>End</span>
+                    <span>Duration</span>
+                    <span>Status</span>
+                </div>
+                <div id="schedule-body">
+                    <div class="schedule-row">
+                        <span class="stage-num" style="color: var(--text-muted)"
+                            >—</span
+                        >
+                        <span class="time-mono" style="color: var(--text-muted)"
+                            >Fetching schedule…</span
+                        >
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+            </div>
+
+            <footer>
+                SNO Power Dashboard · EDA + ACM Loadshedding Automation · Data:
+                EskomSePush API · Refresh every 5 min
+            </footer>
         </div>
-        <div class="meta-item">
-          <div class="meta-key">Power</div>
-          <div class="meta-val" id="power-lab1">ON</div>
-        </div>
-        <div class="meta-item">
-          <div class="meta-key">OCP API</div>
-          <div class="meta-val" id="api-lab1">Healthy</div>
-        </div>
-        <div class="meta-item">
-          <div class="meta-key">Node</div>
-          <div class="meta-val" id="node-lab1">Ready</div>
-        </div>
-      </div>
-      <div class="node-actions">
-        <button class="btn success" onclick="triggerAction('lab1','power-on')">Power On</button>
-        <button class="btn danger"  onclick="triggerAction('lab1','power-off')">Power Off</button>
-        <button class="btn"         onclick="triggerAction('lab1','status')">Refresh</button>
-      </div>
-    </div>
 
-    <div class="node-card online" id="card-lab2">
-      <div class="node-header">
-        <span class="node-name">lab2</span>
-        <span class="status-badge online" id="badge-lab2">Online</span>
-      </div>
-      <div class="node-meta">
-        <div class="meta-item">
-          <div class="meta-key">IPMI</div>
-          <div class="meta-val" id="ipmi-lab2">192.168.10.12</div>
-        </div>
-        <div class="meta-item">
-          <div class="meta-key">Power</div>
-          <div class="meta-val" id="power-lab2">ON</div>
-        </div>
-        <div class="meta-item">
-          <div class="meta-key">OCP API</div>
-          <div class="meta-val" id="api-lab2">Healthy</div>
-        </div>
-        <div class="meta-item">
-          <div class="meta-key">Node</div>
-          <div class="meta-val" id="node-lab2">Ready</div>
-        </div>
-      </div>
-      <div class="node-actions">
-        <button class="btn success" onclick="triggerAction('lab2','power-on')">Power On</button>
-        <button class="btn danger"  onclick="triggerAction('lab2','power-off')">Power Off</button>
-        <button class="btn"         onclick="triggerAction('lab2','status')">Refresh</button>
-      </div>
-    </div>
+        <script>
+            // ============================================================
+            // CONFIG — environment specific values
+            // ============================================================
+            const CONFIG = {
+                // Backend API (your EDA/AAP proxy that feeds this dashboard)
+                // This endpoint should return JSON matching the EskomSePush shape
+                // proxied through your hub cluster to avoid CORS and hide the API key.
+                apiBase: "/api/loadshedding",
 
-  </div>
+                // Alternatively, call EskomSePush directly (requires CORS proxy or same-origin)
+                // eskomToken: 'YOUR_TOKEN',
+                // areaId: 'capetown-10-atlantis',
 
-  <!-- Countdown -->
-  <div class="section-label">Next outage countdown</div>
-  <div class="countdown-row">
-    <div class="countdown-card">
-      <div class="countdown-val" id="cd-hours" style="color:var(--amber)">--</div>
-      <div class="countdown-label">hours</div>
-    </div>
-    <div class="countdown-card">
-      <div class="countdown-val" id="cd-mins" style="color:var(--amber)">--</div>
-      <div class="countdown-label">minutes</div>
-    </div>
-    <div class="countdown-card">
-      <div class="countdown-val" id="cd-secs" style="color:var(--amber)">--</div>
-      <div class="countdown-label">seconds</div>
-    </div>
-  </div>
+                // Lab node BMC addresses (sushy virtual Redfish on Fedora KVM host)
+                lab1: { ipmi: "192.168.22.157:8000", label: "lab1" },
+                lab2: { ipmi: "not deployed", label: "lab2" },
 
-  <!-- 24-hour timeline -->
-  <div class="timeline-section">
-    <div class="section-label">Today's outage timeline</div>
-    <div class="timeline-track">
-      <div class="timeline-hours" id="timeline-hours"></div>
-      <div class="timeline-labels">
-        <span>00:00</span><span>06:00</span><span>12:00</span><span>18:00</span><span>23:59</span>
-      </div>
-    </div>
-  </div>
+                // AAP webhook to trigger manual power actions
+                aapWebhook: "/api/aap/trigger",
+            };
 
-  <!-- Schedule table -->
-  <div class="section-label">Upcoming events</div>
-  <div class="schedule-card">
-    <div class="schedule-header">
-      <h2>EskomSePush Schedule</h2>
-      <span class="area-tag" id="area-tag">Loading…</span>
-    </div>
-    <div class="schedule-row header">
-      <span>Stage</span>
-      <span>Start</span>
-      <span>End</span>
-      <span>Duration</span>
-      <span>Status</span>
-    </div>
-    <div id="schedule-body">
-      <div class="schedule-row">
-        <span class="stage-num" style="color:var(--text-muted)">—</span>
-        <span class="time-mono" style="color:var(--text-muted)">Fetching schedule…</span>
-        <span></span><span></span><span></span>
-      </div>
-    </div>
-  </div>
+            // ============================================================
+            // State
+            // ============================================================
+            let state = {
+                events: [],
+                area: "Atlantis (Area 10)",
+                lab1: { power: "on", api: "healthy", node: "Ready" },
+                lab2: { power: "on", api: "healthy", node: "Ready" },
+                nextOutage: null,
+                currentStage: 0,
+                loadshedding_active: false,
+            };
 
-  <footer>
-    SNO Power Dashboard · EDA + ACM Loadshedding Automation ·
-    Data: EskomSePush API · Refresh every 5 min
-  </footer>
+            // ============================================================
+            // Rendering helpers
+            // ============================================================
+            function fmt(isoStr) {
+                if (!isoStr) return "—";
+                const d = new Date(isoStr);
+                return d.toLocaleString("en-ZA", {
+                    month: "short",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                });
+            }
 
-</div>
+            function fmtTime(isoStr) {
+                if (!isoStr) return "—";
+                const d = new Date(isoStr);
+                return d.toLocaleTimeString("en-ZA", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    hour12: false,
+                });
+            }
 
-<script>
-// ============================================================
-// CONFIG — update these for your environment
-// ============================================================
-const CONFIG = {
-  // Backend API (your EDA/AAP proxy that feeds this dashboard)
-  // This endpoint should return JSON matching the EskomSePush shape
-  // proxied through your hub cluster to avoid CORS and hide the API key.
-  apiBase: '/api/loadshedding',
+            function duration(start, end) {
+                const ms = new Date(end) - new Date(start);
+                const h = Math.floor(ms / 3600000);
+                const m = Math.floor((ms % 3600000) / 60000);
+                return h > 0 ? `${h}h ${m}m` : `${m}m`;
+            }
 
-  // Alternatively, call EskomSePush directly (requires CORS proxy or same-origin)
-  // eskomToken: 'YOUR_TOKEN',
-  // areaId: 'capetown-10-atlantis',
+            function updateLastUpdate() {
+                document.getElementById("last-update-time").textContent =
+                    new Date().toLocaleTimeString("en-ZA", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        second: "2-digit",
+                    });
+            }
 
-  // Lab node IPMI addresses (display only — actions go through AAP)
-  lab1: { ipmi: '192.168.10.11', label: 'lab1' },
-  lab2: { ipmi: '192.168.10.12', label: 'lab2' },
+            // ============================================================
+            // Node card update
+            // ============================================================
+            function renderNodeCard(node) {
+                const s = state[node];
+                const card = document.getElementById(`card-${node}`);
+                const badge = document.getElementById(`badge-${node}`);
+                const powerEl = document.getElementById(`power-${node}`);
+                const apiEl = document.getElementById(`api-${node}`);
+                const nodeEl = document.getElementById(`node-${node}`);
 
-  // AAP webhook to trigger manual power actions
-  aapWebhook: '/api/aap/trigger',
-};
+                card.className =
+                    "node-card " +
+                    (s.power === "on"
+                        ? "online"
+                        : s.power === "transitioning"
+                          ? "transitioning"
+                          : "offline");
 
-// ============================================================
-// State
-// ============================================================
-let state = {
-  events: [],
-  area: 'Atlantis (Area 10)',
-  lab1: { power: 'on', api: 'healthy', node: 'Ready' },
-  lab2: { power: 'on', api: 'healthy', node: 'Ready' },
-  nextOutage: null,
-  currentStage: 0,
-  loadshedding_active: false,
-};
+                badge.className =
+                    "status-badge " +
+                    (s.power === "on"
+                        ? "online"
+                        : s.power === "transitioning"
+                          ? "transitioning"
+                          : "offline");
+                badge.textContent =
+                    s.power === "on"
+                        ? "Online"
+                        : s.power === "transitioning"
+                          ? "Transitioning"
+                          : "Offline";
 
-// ============================================================
-// Rendering helpers
-// ============================================================
-function fmt(isoStr) {
-  if (!isoStr) return '—';
-  const d = new Date(isoStr);
-  return d.toLocaleString('en-ZA', {
-    month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', hour12: false
-  });
-}
+                powerEl.textContent =
+                    s.power === "on"
+                        ? "ON"
+                        : s.power === "transitioning"
+                          ? "WAIT"
+                          : "OFF";
+                powerEl.style.color =
+                    s.power === "on"
+                        ? "var(--green)"
+                        : s.power === "transitioning"
+                          ? "var(--amber)"
+                          : "var(--red)";
 
-function fmtTime(isoStr) {
-  if (!isoStr) return '—';
-  const d = new Date(isoStr);
-  return d.toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', hour12: false });
-}
+                apiEl.textContent = s.power === "on" ? "Healthy" : "—";
+                apiEl.style.color =
+                    s.power === "on" ? "var(--green)" : "var(--text-muted)";
 
-function duration(start, end) {
-  const ms = new Date(end) - new Date(start);
-  const h = Math.floor(ms / 3600000);
-  const m = Math.floor((ms % 3600000) / 60000);
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
-}
+                nodeEl.textContent = s.power === "on" ? s.node || "Ready" : "—";
+                nodeEl.style.color =
+                    s.power === "on" ? "var(--green)" : "var(--text-muted)";
+            }
 
-function updateLastUpdate() {
-  document.getElementById('last-update-time').textContent =
-    new Date().toLocaleTimeString('en-ZA', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-}
+            // ============================================================
+            // Stage banner
+            // ============================================================
+            function renderStageBanner() {
+                const pill = document.getElementById("stage-pill");
+                const label = document.getElementById("stage-label");
+                const desc = document.getElementById("stage-desc");
+                const dot = document.getElementById("live-dot");
 
-// ============================================================
-// Node card update
-// ============================================================
-function renderNodeCard(node) {
-  const s = state[node];
-  const card = document.getElementById(`card-${node}`);
-  const badge = document.getElementById(`badge-${node}`);
-  const powerEl = document.getElementById(`power-${node}`);
-  const apiEl = document.getElementById(`api-${node}`);
-  const nodeEl = document.getElementById(`node-${node}`);
+                if (state.loadshedding_active) {
+                    pill.className = "stage-pill stage-active";
+                    pill.textContent = state.currentStage || "!";
+                    label.textContent = `Stage ${state.currentStage || "?"} Loadshedding Active`;
+                    desc.textContent = state.activeEvent
+                        ? `Ends at ${fmtTime(state.activeEvent.end)} · Clusters shutting down`
+                        : "Clusters are powered down";
+                    dot.className = "live-dot active";
+                } else {
+                    pill.className = "stage-pill stage-0";
+                    pill.textContent = state.currentStage || "0";
+                    label.textContent = "No active loadshedding";
+                    const next = state.nextOutage;
+                    desc.textContent = next
+                        ? `Next event: ${fmt(next.start)} (${duration(new Date(), next.start)} away)`
+                        : "No upcoming events in schedule";
+                    dot.className = "live-dot";
+                }
+            }
 
-  card.className = 'node-card ' + (
-    s.power === 'on' ? 'online' :
-    s.power === 'transitioning' ? 'transitioning' : 'offline'
-  );
+            // ============================================================
+            // Schedule table
+            // ============================================================
+            function renderSchedule() {
+                document.getElementById("area-tag").textContent = state.area;
+                const tbody = document.getElementById("schedule-body");
+                const now = new Date();
 
-  badge.className = 'status-badge ' + (
-    s.power === 'on' ? 'online' :
-    s.power === 'transitioning' ? 'transitioning' : 'offline'
-  );
-  badge.textContent = s.power === 'on' ? 'Online' :
-                      s.power === 'transitioning' ? 'Transitioning' : 'Offline';
-
-  powerEl.textContent = s.power === 'on' ? 'ON' : s.power === 'transitioning' ? 'WAIT' : 'OFF';
-  powerEl.style.color = s.power === 'on' ? 'var(--green)' :
-                        s.power === 'transitioning' ? 'var(--amber)' : 'var(--red)';
-
-  apiEl.textContent = s.power === 'on' ? 'Healthy' : '—';
-  apiEl.style.color = s.power === 'on' ? 'var(--green)' : 'var(--text-muted)';
-
-  nodeEl.textContent = s.power === 'on' ? (s.node || 'Ready') : '—';
-  nodeEl.style.color = s.power === 'on' ? 'var(--green)' : 'var(--text-muted)';
-}
-
-// ============================================================
-// Stage banner
-// ============================================================
-function renderStageBanner() {
-  const pill = document.getElementById('stage-pill');
-  const label = document.getElementById('stage-label');
-  const desc = document.getElementById('stage-desc');
-  const dot = document.getElementById('live-dot');
-
-  if (state.loadshedding_active) {
-    pill.className = 'stage-pill stage-active';
-    pill.textContent = state.currentStage || '!';
-    label.textContent = `Stage ${state.currentStage || '?'} Loadshedding Active`;
-    desc.textContent = state.activeEvent
-      ? `Ends at ${fmtTime(state.activeEvent.end)} · Clusters shutting down`
-      : 'Clusters are powered down';
-    dot.className = 'live-dot active';
-  } else {
-    pill.className = 'stage-pill stage-0';
-    pill.textContent = state.currentStage || '0';
-    label.textContent = 'No active loadshedding';
-    const next = state.nextOutage;
-    desc.textContent = next
-      ? `Next event: ${fmt(next.start)} (${duration(new Date(), next.start)} away)`
-      : 'No upcoming events in schedule';
-    dot.className = 'live-dot';
-  }
-}
-
-// ============================================================
-// Schedule table
-// ============================================================
-function renderSchedule() {
-  document.getElementById('area-tag').textContent = state.area;
-  const tbody = document.getElementById('schedule-body');
-  const now = new Date();
-
-  if (!state.events || state.events.length === 0) {
-    tbody.innerHTML = `<div class="schedule-row">
+                if (!state.events || state.events.length === 0) {
+                    tbody.innerHTML = `<div class="schedule-row">
       <span class="stage-num" style="color:var(--text-muted)">0</span>
       <span class="time-mono" style="color:var(--green)">No outages scheduled</span>
       <span></span><span></span><span></span>
     </div>`;
-    return;
-  }
+                    return;
+                }
 
-  tbody.innerHTML = state.events.map(ev => {
-    const start = new Date(ev.start);
-    const end = new Date(ev.end);
-    const isActive = now >= start && now < end;
-    const isUpcoming = start > now && start < new Date(now.getTime() + 12 * 3600000);
+                tbody.innerHTML = state.events
+                    .map((ev) => {
+                        const start = new Date(ev.start);
+                        const end = new Date(ev.end);
+                        const isActive = now >= start && now < end;
+                        const isUpcoming =
+                            start > now &&
+                            start < new Date(now.getTime() + 12 * 3600000);
 
-    const rowClass = isActive ? 'active-row' : isUpcoming ? 'upcoming-row' : '';
-    const badgeClass = isActive ? 'active' : isUpcoming ? 'upcoming' : 'past';
-    const badgeText = isActive ? 'Active' : isUpcoming ? 'Upcoming' : 'Past';
-    const stage = ev.note ? (ev.note.match(/Stage\s*(\d)/i)?.[1] || '?') : '?';
+                        const rowClass = isActive
+                            ? "active-row"
+                            : isUpcoming
+                              ? "upcoming-row"
+                              : "";
+                        const badgeClass = isActive
+                            ? "active"
+                            : isUpcoming
+                              ? "upcoming"
+                              : "past";
+                        const badgeText = isActive
+                            ? "Active"
+                            : isUpcoming
+                              ? "Upcoming"
+                              : "Past";
+                        const stage = ev.note
+                            ? ev.note.match(/Stage\s*(\d)/i)?.[1] || "?"
+                            : "?";
 
-    return `<div class="schedule-row ${rowClass}">
-      <span class="stage-num" style="color: ${isActive ? 'var(--red)' : isUpcoming ? 'var(--amber)' : 'var(--text-dim)'}">${stage}</span>
+                        return `<div class="schedule-row ${rowClass}">
+      <span class="stage-num" style="color: ${isActive ? "var(--red)" : isUpcoming ? "var(--amber)" : "var(--text-dim)"}">${stage}</span>
       <span class="time-mono">${fmt(ev.start)}</span>
       <span class="time-mono">${fmt(ev.end)}</span>
       <span style="color:var(--text-muted)">${duration(ev.start, ev.end)}</span>
       <span><span class="event-badge ${badgeClass}">${badgeText}</span></span>
     </div>`;
-  }).join('');
-}
+                    })
+                    .join("");
+            }
 
-// ============================================================
-// 24h Timeline
-// ============================================================
-function renderTimeline() {
-  const container = document.getElementById('timeline-hours');
-  const now = new Date();
-  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            // ============================================================
+            // 24h Timeline
+            // ============================================================
+            function renderTimeline() {
+                const container = document.getElementById("timeline-hours");
+                const now = new Date();
+                const today = new Date(
+                    now.getFullYear(),
+                    now.getMonth(),
+                    now.getDate(),
+                );
 
-  const blocks = Array.from({length: 24}, (_, h) => {
-    const blockStart = new Date(today.getTime() + h * 3600000);
-    const blockEnd   = new Date(blockStart.getTime() + 3600000);
-    const isCurrent  = now >= blockStart && now < blockEnd;
+                const blocks = Array.from({ length: 24 }, (_, h) => {
+                    const blockStart = new Date(today.getTime() + h * 3600000);
+                    const blockEnd = new Date(blockStart.getTime() + 3600000);
+                    const isCurrent = now >= blockStart && now < blockEnd;
 
-    const inOutage = state.events.some(ev => {
-      const s = new Date(ev.start);
-      const e = new Date(ev.end);
-      return blockStart < e && blockEnd > s;
-    });
+                    const inOutage = state.events.some((ev) => {
+                        const s = new Date(ev.start);
+                        const e = new Date(ev.end);
+                        return blockStart < e && blockEnd > s;
+                    });
 
-    const cls = ['hour-block', inOutage ? 'outage' : '', isCurrent ? 'current' : ''].filter(Boolean).join(' ');
-    const title = `${String(h).padStart(2,'0')}:00${inOutage ? ' — outage' : ''}`;
-    return `<div class="${cls}" title="${title}"></div>`;
-  });
+                    const cls = [
+                        "hour-block",
+                        inOutage ? "outage" : "",
+                        isCurrent ? "current" : "",
+                    ]
+                        .filter(Boolean)
+                        .join(" ");
+                    const title = `${String(h).padStart(2, "0")}:00${inOutage ? " — outage" : ""}`;
+                    return `<div class="${cls}" title="${title}"></div>`;
+                });
 
-  container.innerHTML = blocks.join('');
-}
+                container.innerHTML = blocks.join("");
+            }
 
-// ============================================================
-// Countdown timer
-// ============================================================
-function renderCountdown() {
-  const next = state.nextOutage;
-  if (!next) {
-    ['cd-hours','cd-mins','cd-secs'].forEach(id => document.getElementById(id).textContent = '--');
-    return;
-  }
+            // ============================================================
+            // Countdown timer
+            // ============================================================
+            function renderCountdown() {
+                const next = state.nextOutage;
+                if (!next) {
+                    ["cd-hours", "cd-mins", "cd-secs"].forEach(
+                        (id) =>
+                            (document.getElementById(id).textContent = "--"),
+                    );
+                    return;
+                }
 
-  const diff = Math.max(0, new Date(next.start) - new Date());
-  const h = Math.floor(diff / 3600000);
-  const m = Math.floor((diff % 3600000) / 60000);
-  const s = Math.floor((diff % 60000) / 1000);
+                const diff = Math.max(0, new Date(next.start) - new Date());
+                const h = Math.floor(diff / 3600000);
+                const m = Math.floor((diff % 3600000) / 60000);
+                const s = Math.floor((diff % 60000) / 1000);
 
-  document.getElementById('cd-hours').textContent = String(h).padStart(2, '0');
-  document.getElementById('cd-mins').textContent  = String(m).padStart(2, '0');
-  document.getElementById('cd-secs').textContent  = String(s).padStart(2, '0');
+                document.getElementById("cd-hours").textContent = String(
+                    h,
+                ).padStart(2, "0");
+                document.getElementById("cd-mins").textContent = String(
+                    m,
+                ).padStart(2, "0");
+                document.getElementById("cd-secs").textContent = String(
+                    s,
+                ).padStart(2, "0");
 
-  // Colour shifts as outage approaches
-  const urgentColor = diff < 30 * 60000 ? 'var(--red)' : diff < 60 * 60000 ? 'var(--amber)' : 'var(--text)';
-  ['cd-hours','cd-mins','cd-secs'].forEach(id => document.getElementById(id).style.color = urgentColor);
-}
+                // Colour shifts as outage approaches
+                const urgentColor =
+                    diff < 30 * 60000
+                        ? "var(--red)"
+                        : diff < 60 * 60000
+                          ? "var(--amber)"
+                          : "var(--text)";
+                ["cd-hours", "cd-mins", "cd-secs"].forEach(
+                    (id) =>
+                        (document.getElementById(id).style.color = urgentColor),
+                );
+            }
 
-// ============================================================
-// Full render pass
-// ============================================================
-function renderAll() {
-  renderStageBanner();
-  renderNodeCard('lab1');
-  renderNodeCard('lab2');
-  renderSchedule();
-  renderTimeline();
-  renderCountdown();
-  updateLastUpdate();
-}
+            // ============================================================
+            // Full render pass
+            // ============================================================
+            function renderAll() {
+                renderStageBanner();
+                renderNodeCard("lab1");
+                renderNodeCard("lab2");
+                renderSchedule();
+                renderTimeline();
+                renderCountdown();
+                updateLastUpdate();
+            }
 
-// ============================================================
-// Data fetch — calls your backend proxy
-// Replace this with a real fetch once the backend is running.
-// The mock below simulates an upcoming event 90 minutes from now.
-// ============================================================
-async function fetchData() {
-  try {
-    // --- MOCK DATA (replace with real fetch below) ---
-    const now = new Date();
-    const mockStart = new Date(now.getTime() + 90 * 60000);   // 90 min from now
-    const mockEnd   = new Date(mockStart.getTime() + 150 * 60000);  // 2.5h window
+            // ============================================================
+            // Data fetch — calls your backend proxy
+            // Replace this with a real fetch once the backend is running.
+            // The mock below simulates an upcoming event 90 minutes from now.
+            // ============================================================
+            async function fetchData() {
+                try {
+                    // --- MOCK DATA (replace with real fetch below) ---
+                    const now = new Date();
+                    const mockStart = new Date(now.getTime() + 90 * 60000); // 90 min from now
+                    const mockEnd = new Date(mockStart.getTime() + 150 * 60000); // 2.5h window
 
-    const pastStart = new Date(now.getTime() - 4 * 3600000);
-    const pastEnd   = new Date(pastStart.getTime() + 7200000);
+                    const pastStart = new Date(now.getTime() - 4 * 3600000);
+                    const pastEnd = new Date(pastStart.getTime() + 7200000);
 
-    const mockEvents = [
-      { start: pastStart.toISOString(), end: pastEnd.toISOString(), note: 'Stage 2' },
-      { start: mockStart.toISOString(), end: mockEnd.toISOString(),   note: 'Stage 2' },
-    ];
+                    const mockEvents = [
+                        {
+                            start: pastStart.toISOString(),
+                            end: pastEnd.toISOString(),
+                            note: "Stage 2",
+                        },
+                        {
+                            start: mockStart.toISOString(),
+                            end: mockEnd.toISOString(),
+                            note: "Stage 2",
+                        },
+                    ];
 
-    // REAL fetch (uncomment and remove mock above when backend is ready):
-    // const resp = await fetch(`${CONFIG.apiBase}/status`);
-    // if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-    // const data = await resp.json();
-    // const mockEvents = data.events;
-    // state.lab1 = data.lab1;
-    // state.lab2 = data.lab2;
-    // state.area = data.area_name;
-    // state.currentStage = data.current_stage;
+                    // REAL fetch (uncomment and remove mock above when backend is ready):
+                    // const resp = await fetch(`${CONFIG.apiBase}/status`);
+                    // if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                    // const data = await resp.json();
+                    // const mockEvents = data.events;
+                    // state.lab1 = data.lab1;
+                    // state.lab2 = data.lab2;
+                    // state.area = data.area_name;
+                    // state.currentStage = data.current_stage;
 
-    state.events = mockEvents;
+                    state.events = mockEvents;
 
-    // Determine active/upcoming
-    const activeEv = mockEvents.find(ev => now >= new Date(ev.start) && now < new Date(ev.end));
-    const upcomingEvs = mockEvents.filter(ev => new Date(ev.start) > now).sort((a,b) => new Date(a.start) - new Date(b.start));
+                    // Determine active/upcoming
+                    const activeEv = mockEvents.find(
+                        (ev) =>
+                            now >= new Date(ev.start) && now < new Date(ev.end),
+                    );
+                    const upcomingEvs = mockEvents
+                        .filter((ev) => new Date(ev.start) > now)
+                        .sort((a, b) => new Date(a.start) - new Date(b.start));
 
-    state.loadshedding_active = !!activeEv;
-    state.activeEvent = activeEv || null;
-    state.nextOutage = upcomingEvs[0] || null;
-    state.currentStage = activeEv ? (activeEv.note?.match(/Stage\s*(\d)/i)?.[1] || 2) : 0;
+                    state.loadshedding_active = !!activeEv;
+                    state.activeEvent = activeEv || null;
+                    state.nextOutage = upcomingEvs[0] || null;
+                    state.currentStage = activeEv
+                        ? activeEv.note?.match(/Stage\s*(\d)/i)?.[1] || 2
+                        : 0;
 
-    renderAll();
-  } catch (err) {
-    console.error('Dashboard fetch error:', err);
-    document.getElementById('area-tag').textContent = 'API error — retrying…';
-  }
-}
+                    renderAll();
+                } catch (err) {
+                    console.error("Dashboard fetch error:", err);
+                    document.getElementById("area-tag").textContent =
+                        "API error — retrying…";
+                }
+            }
 
-// ============================================================
-// Manual action trigger (sends webhook to AAP)
-// ============================================================
-async function triggerAction(node, action) {
-  const confirmMsg = {
-    'power-off': `Are you sure you want to manually power off ${node}?`,
-    'power-on':  `Power on ${node}?`,
-    'status':    null,
-  }[action];
+            // ============================================================
+            // Manual action trigger (sends webhook to AAP)
+            // ============================================================
+            async function triggerAction(node, action) {
+                const confirmMsg = {
+                    "power-off": `Are you sure you want to manually power off ${node}?`,
+                    "power-on": `Power on ${node}?`,
+                    status: null,
+                }[action];
 
-  if (confirmMsg && !confirm(confirmMsg)) return;
+                if (confirmMsg && !confirm(confirmMsg)) return;
 
-  const badge = document.getElementById(`badge-${node}`);
-  const prev = badge.textContent;
-  badge.className = 'status-badge transitioning';
-  badge.textContent = 'Working…';
-  state[node].power = 'transitioning';
+                const badge = document.getElementById(`badge-${node}`);
+                const prev = badge.textContent;
+                badge.className = "status-badge transitioning";
+                badge.textContent = "Working…";
+                state[node].power = "transitioning";
 
-  try {
-    // In production, POST to your AAP webhook
-    // await fetch(CONFIG.aapWebhook, {
-    //   method: 'POST',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ node, action })
-    // });
+                try {
+                    // In production, POST to your AAP webhook
+                    // await fetch(CONFIG.aapWebhook, {
+                    //   method: 'POST',
+                    //   headers: { 'Content-Type': 'application/json' },
+                    //   body: JSON.stringify({ node, action })
+                    // });
 
-    // Simulate response delay
-    await new Promise(r => setTimeout(r, 2000));
-    state[node].power = action === 'power-off' ? 'off' : 'on';
-  } catch (err) {
-    console.error('Action failed:', err);
-    badge.className = 'status-badge unknown';
-    badge.textContent = 'Error';
-    return;
-  }
+                    // Simulate response delay
+                    await new Promise((r) => setTimeout(r, 2000));
+                    state[node].power = action === "power-off" ? "off" : "on";
+                } catch (err) {
+                    console.error("Action failed:", err);
+                    badge.className = "status-badge unknown";
+                    badge.textContent = "Error";
+                    return;
+                }
 
-  renderNodeCard(node);
-}
+                renderNodeCard(node);
+            }
 
-// ============================================================
-// Init
-// ============================================================
-fetchData();
-setInterval(fetchData, 300000);    // refresh data every 5 min
-setInterval(renderCountdown, 1000); // countdown ticks every second
-</script>
-</body>
+            // ============================================================
+            // Init
+            // ============================================================
+            fetchData();
+            setInterval(fetchData, 300000); // refresh data every 5 min
+            setInterval(renderCountdown, 1000); // countdown ticks every second
+        </script>
+    </body>
 </html>

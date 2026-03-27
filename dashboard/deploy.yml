@@ -1,6 +1,9 @@
 ---
 # SNO Loadshedding Dashboard — OpenShift deployment
 #
+# Uses python3 http.server to serve the static dashboard HTML.
+# No nginx config needed — zero configuration static file server.
+#
 # Deploy:
 #   oc apply -n loadshedding-dashboard -f dashboard/deploy.yml
 #
@@ -26,15 +29,21 @@ spec:
         app: loadshedding-dashboard
     spec:
       containers:
-        - name: nginx
-          image: registry.access.redhat.com/ubi9/nginx-120:latest
+        - name: dashboard
+          image: registry.access.redhat.com/ubi9/python-311:latest
+          command:
+            - python3
+            - -m
+            - http.server
+            - "8080"
+            - --directory
+            - /dashboard
           ports:
             - containerPort: 8080
               name: http
           volumeMounts:
             - name: html
-              mountPath: /opt/app-root/src/index.html
-              subPath: index.html
+              mountPath: /dashboard
           resources:
             requests:
               cpu: 50m
