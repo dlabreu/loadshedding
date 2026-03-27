@@ -1,9 +1,12 @@
 FROM registry.redhat.io/ansible-automation-platform-26/de-supported-rhel9:latest
 
-# Install Python dependencies needed by the source plugin
 RUN pip3 install --user aiohttp aiohttp-retry --quiet
 
-# Copy collection to system-wide path accessible by any UID
-# /usr/share/ansible/collections is readable by all users
+# EDA looks for event sources at extensions/eda/plugins/event_source/
 COPY collection \
   /usr/share/ansible/collections/ansible_collections/abreu/loadshedding
+
+# Create the extensions path and symlink the plugin there
+RUN mkdir -p /usr/share/ansible/collections/ansible_collections/abreu/loadshedding/extensions/eda/plugins/event_source && \
+    cp /usr/share/ansible/collections/ansible_collections/abreu/loadshedding/plugins/event_source/eskomsepush_source.py \
+       /usr/share/ansible/collections/ansible_collections/abreu/loadshedding/extensions/eda/plugins/event_source/
