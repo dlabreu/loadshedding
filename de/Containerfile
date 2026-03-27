@@ -1,10 +1,9 @@
 FROM registry.redhat.io/ansible-automation-platform-26/de-supported-rhel9:latest
 
 # Install Python dependencies needed by the source plugin
-# No USER root needed — pip install with --user works as non-root
 RUN pip3 install --user aiohttp aiohttp-retry --quiet
 
-# Copy the collection into the user's ansible collections path
-# This path is writable without root
-COPY --chown=1000:0 collection \
-  /home/runner/.ansible/collections/ansible_collections/abreu/loadshedding
+# Copy collection to system-wide path accessible by any UID
+# /usr/share/ansible/collections is readable by all users
+COPY collection \
+  /usr/share/ansible/collections/ansible_collections/abreu/loadshedding
